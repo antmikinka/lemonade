@@ -24,6 +24,7 @@ plugins:
   - monorepo
   - search:
       separator: '[\s\-,:!=\[\]()"/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
+  - copy-to-llm                    # "Copy page as Markdown" button on every page
 
 # ==============================================================================
 # Theme Configuration

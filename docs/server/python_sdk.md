@@ -7,7 +7,7 @@ The official Python client for Lemonade Server. It provides a type-safe, modular
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Client Reference](#client-reference)
-  - [Chat & Completions](#chat--completions) | [Embeddings & Reranking](#embeddings--reranking) | [Audio](#audio) | [Images](#images) | [Models](#models) | [Model Management](#model-management) | [System](#system)
+  - [Chat & Completions](#chat-completions) | [Embeddings & Reranking](#embeddings-reranking) | [Audio](#audio) | [Images](#images) | [Models](#models) | [Model Management](#model-management) | [System](#system)
 - [Data Models Reference](#data-models-reference)
 - [Exception Handling](#exception-handling)
 - [Guides](#guides)

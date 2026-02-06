@@ -1,4 +1,5 @@
 mkdocs
 mkdocs-material
 mkdocs-monorepo-plugin
+mkdocs-copy-to-llm
 pymdown-extensions
