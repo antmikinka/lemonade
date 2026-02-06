@@ -95,4 +95,44 @@ print(response)
 
 The Python above will work with Lemonade Server, along with a variety of other cloud and local LLM servers, just by changing the `base_url`, `api_key`, and `model` as needed. This example demonstrates that details like deployment location (local vs. cloud), hardware type (GPU vs. NPU), and backend implementation (OGA vs. llama.cpp), etc. are hidden behind a unified interface.
 
+## Lemonade Python SDK
+
+In addition to the OpenAI SDK, Lemonade provides its own official Python client library called `lemonade-api`. While the OpenAI SDK covers the standard chat and completion endpoints, the Lemonade SDK provides type-safe access to **all** Lemonade Server endpoints, including Lemonade-specific features that the OpenAI SDK does not cover:
+
+| Feature | OpenAI SDK | Lemonade SDK |
+|---------|:----------:|:------------:|
+| Chat completions | Yes | Yes |
+| Text completions | Yes | Yes |
+| Embeddings | Yes | Yes |
+| Responses API | Yes | Yes |
+| Audio transcription | Yes | Yes |
+| Text-to-speech | Yes | Yes |
+| Image generation | Yes | Yes |
+| Model management (pull, load, unload, delete) | No | Yes |
+| Health monitoring | No | Yes |
+| Performance statistics | No | Yes |
+| System information & device enumeration | No | Yes |
+| Liveness check | No | Yes |
+| Streaming download progress | No | Yes |
+| Type-safe Pydantic models for all requests/responses | No | Yes |
+
+**Quick example with the Lemonade SDK:**
+
+```python
+from lemonade_api import LemonadeClient, ChatCompletionRequest, Message
+
+client = LemonadeClient(base_url="http://localhost:8000")
+
+response = client.chat_completions(ChatCompletionRequest(
+    model="Qwen3-0.6B-GGUF",
+    messages=[Message(role="user", content="Hi, how are you?")]
+))
+
+print(response.choices[0].message.content)
+```
+
+Both SDKs can be used interchangeably for common endpoints. Choose the Lemonade SDK when you need model management, system monitoring, or full type safety. Choose the OpenAI SDK for maximum portability across LLM providers.
+
+For the full SDK reference, see the [Python SDK documentation](./python_sdk.md).
+
 <!--Copyright (c) 2025 AMD-->

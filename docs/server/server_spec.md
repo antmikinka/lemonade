@@ -2,6 +2,20 @@
 
 The Lemonade Server is a standards-compliant server process that provides an HTTP API to enable integration with other applications.
 
+## API Versioning
+
+All endpoints are available on **both `/api/v0/` and `/api/v1/`** paths. Both versions behave identically -- `v0` is maintained for backward compatibility. New integrations should use `/api/v1/`.
+
+```bash
+# Both of these are equivalent:
+curl http://localhost:8000/api/v0/chat/completions ...
+curl http://localhost:8000/api/v1/chat/completions ...
+```
+
+> **Note:** The `/live` endpoint is the only exception -- it is available at the root path (`/live`) and not under `/api/vX/`.
+
+## Backends
+
 Lemonade Server currently supports these backends:
 
 | Backend                                                                 | Model Format | Description                                                                                                                |
@@ -107,6 +121,45 @@ Each model can be loaded with custom settings (context size, llamacpp backend, l
 1. Values passed explicitly in `/api/v1/load` request (highest priority)
 2. Values from `lemonade-server` CLI arguments or environment variables
 3. Hardcoded defaults in `lemonade-router` (lowest priority)
+
+## Backend Capabilities Matrix
+
+Not all features are available on every inference backend. The table below shows which API features each backend supports. Use this to understand what your hardware and backend can do.
+
+| Feature | llamacpp | RyzenAI (OGA) | FLM | Whisper | Stable Diffusion |
+|:--------|:--------:|:--------------:|:---:|:-------:|:----------------:|
+| Chat completions | Yes | Yes | Yes | -- | -- |
+| Chat completions (streaming) | Yes | Yes | Yes | -- | -- |
+| Chat completions (async) | Yes | Yes | -- | -- | -- |
+| Text completions | Yes | Yes | Yes | -- | -- |
+| Text completions (streaming) | Yes | Yes | Yes | -- | -- |
+| Text completions (async) | Yes | Yes | -- | -- | -- |
+| Responses API | Yes | -- | -- | -- | -- |
+| Responses API (streaming) | Yes | -- | -- | -- | -- |
+| Embeddings | Yes | -- | -- | -- | -- |
+| Reranking | Yes | -- | -- | -- | -- |
+| Tool calls | -- | Yes | -- | -- | -- |
+| Tool calls (streaming) | -- | Yes | -- | -- | -- |
+| Multi-model support | Yes | Yes | -- | -- | -- |
+| `stop` parameter | Yes | Yes | -- | -- | -- |
+| `echo` parameter | -- | -- | -- | -- | -- |
+| Generation parameters (`temperature`, `top_p`, `repeat_penalty`, `top_k`) | -- | Yes | -- | -- | -- |
+| Audio transcription | -- | -- | -- | Yes | -- |
+| Audio transcription (with `language`) | -- | -- | -- | Yes | -- |
+| Image generation | -- | -- | -- | -- | Yes |
+| Image generation (base64) | -- | -- | -- | -- | Yes |
+
+### Backend Hardware Support
+
+| Backend | Available Hardware Targets |
+|:--------|:--------------------------|
+| **llamacpp** | `vulkan` (AMD/NVIDIA/Intel GPUs), `rocm` (AMD RDNA3+ GPUs), `metal` (Apple Silicon), `cpu` |
+| **RyzenAI (OGA)** | `cpu`, `hybrid` (CPU + NPU), `npu` (AMD XDNA2) |
+| **FLM** | `npu` (AMD XDNA2) |
+| **Whisper** | `cpu` (x86_64 Windows), `npu` (AMD XDNA2 Windows) |
+| **Stable Diffusion** | `cpu`, `vulkan` |
+
+> **Tip:** Use the [`GET /api/v1/system-info`](#get-apiv1system-info) endpoint to discover which backends and hardware targets are available on your system at runtime.
 
 ## Start the HTTP Server
 
@@ -1386,6 +1439,26 @@ curl "http://localhost:8000/api/v1/system-info"
         - `available` - Whether the backend is currently installed
         - `version` - Installed version (if available)
         - `error` - Reason why not supported (if applicable)
+
+### `GET /live` <sub>![Status](https://img.shields.io/badge/status-fully_available-green)</sub>
+
+Simple liveness check for load balancers, orchestrators, and health monitoring systems. Returns a 200 OK if the server is running.
+
+#### Parameters
+
+This endpoint does not take any parameters.
+
+#### Example request
+
+```bash
+curl http://localhost:8000/live
+```
+
+#### Response format
+
+On success, the endpoint returns a `200 OK` status. The response body is not guaranteed to have a specific format -- the status code alone indicates liveness.
+
+> **Note:** Unlike `/api/v1/health`, this endpoint does not return model or system information. It is a lightweight check intended for automated monitoring. Use `/api/v1/health` when you need details about loaded models and server state.
 
 # Debugging
 

@@ -1,18 +1,13 @@
-# This is the configuration file for MkDocs, a static site generator that uses Markdown files to create documentation sites.
-# The configuration file is written in YAML format and contains various settings for the site.
+# ==============================================================================
+# MkDocs Configuration for Lemonade Server Documentation
+# ==============================================================================
+# To install dependencies: pip install -r docs/assets/mkdocs_requirements.txt
+# To build the site:       mkdocs build
+# To serve locally:        mkdocs serve
 
-# To install the MkDocs dependencies, run the following command in the terminal:
-# pip install -r docs/assets/mkdocs_requirements.txt
-
-# To build the site, run the following command in the terminal:
-# mkdocs build
-
-# To serve the site locally, run the following command in the terminal:
-# mkdocs serve
-
-# To deploy the site to GitHub Pages, run the following command in the terminal:
-# mkdocs gh-deploy  <-- this should be updated when we have CI setup with what the real instructions are.
-
+# ==============================================================================
+# Site Information
+# ==============================================================================
 site_name: Lemonade Server Documentation
 site_url: https://lemonade-server.ai/
 site_description: Lemonade Server is a lightweight, open-source local LLM server that allows you to run and manage multiple AI applications on your local machine. It provides a simple CLI for managing applications and supports various LLMs, making it easy to deploy and use AI models locally.
@@ -22,30 +17,53 @@ edit_uri: server/README.md
 repo_name: lemonade-sdk/lemonade
 repo_url: https://github.com/lemonade-sdk/lemonade
 
+# ==============================================================================
+# Plugins
+# ==============================================================================
 plugins:
   - monorepo
-  - search
+  - search:
+      separator: '[\s\-,:!=\[\]()"/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
 
+# ==============================================================================
+# Theme Configuration
+# ==============================================================================
 theme:
   name: material
-  logo: assets/logo.png  # If we want to use a custom logo instead of an icon
+  logo: assets/logo.png
   icon:
-    repo: fontawesome/brands/github # This is the icon for the repo link in the header
+    repo: fontawesome/brands/github
   favicon: assets/favicon.ico
-  features:
-    - navigation.footer
-    - navigation.tracking
-    - navigation.expand
-    - navigation.top
-    - content.code.annotate
-    - content.code.copy
-  palette:
 
+  # Enhanced features
+  features:
+    # Navigation
+    - navigation.instant          # Fast page loads (SPA-like)
+    - navigation.tracking         # URL updates with scroll position
+    - navigation.expand           # Expand navigation items by default
+    - navigation.top              # Back to top button
+    - navigation.footer           # Footer navigation
+    - navigation.path             # Breadcrumbs
+
+    # Table of Contents
+    - toc.follow                  # TOC follows scroll position
+
+    # Search
+    - search.suggest              # Search autocomplete
+    - search.highlight            # Highlight search terms in results
+    - search.share                # Share search results via URL
+
+    # Content
+    - content.code.annotate       # Annotations in code blocks
+    - content.code.copy           # Copy button for code blocks
+    - content.tabs.link           # Link tabs across pages
+
+  palette:
     # Light mode settings
     - scheme: lightmode
       primary: amber
       toggle:
-        icon: material/weather-night
+        icon: material/brightness-7
         name: Switch to dark mode
 
     # Dark mode settings
@@ -53,12 +71,13 @@ theme:
       primary: amber
       accent: amber
       toggle:
-        icon: material/weather-sunny
+        icon: material/brightness-4
         name: Switch to light mode
   nav_style: dark
 
-# Add the list of markdown files to be included in the documentation
-# The order of the files in the list will determine the order they appear in the documentation
+# ==============================================================================
+# Navigation Structure
+# ==============================================================================
 nav:
   - Downloading and Getting Started: server/README.md
   - Supported Applications: server/apps/README.md
@@ -72,6 +91,7 @@ nav:
       - OpenHands: server/apps/open-hands.md
       - Open WebUI: server/apps/open-webui.md
       - Wut: server/apps/wut.md
+  - Python SDK: server/python_sdk.md
   - Lemonade Server CLI Guide: server/lemonade-server-cli.md
   - Understanding local LLM servers: server/concepts.md
   - Models List: server/server_models.md
@@ -96,7 +116,9 @@ exclude_docs: |
   eval/ort_genai_igpu.md
   eval/lm-eval.md
 
-# The following adds icons on the bottom of the page
+# ==============================================================================
+# Extra Configuration
+# ==============================================================================
 extra:
   homepage: https://lemonade-server.ai
   social:
@@ -106,19 +128,61 @@ extra:
       link: https://github.com/lemonade-sdk/lemonade
     - icon: simple/discord
       link: https://discord.gg/5xXzkMu8Zk
+  generator: false
 
 copyright: Copyright &copy; 2025 AMD. All rights reserved.
 
-# The custom CSS for colors and more
+# Custom CSS and JavaScript
 extra_css:
   - assets/extra.css
 
-# The custom JavaScript for the carousel for the videos
 extra_javascript:
   - assets/carousel.js
 
+# ==============================================================================
+# Markdown Extensions
+# ==============================================================================
 markdown_extensions:
-  - admonition
-  - pymdownx.superfences  # Better code blocks
-  - pymdownx.tabbed:      # Tabbed code blocks
+  # Standard Python-Markdown extensions
+  - abbr                          # Abbreviations
+  - admonition                    # Call-out boxes (note, warning, tip, etc.)
+  - attr_list                     # Add HTML attributes to elements
+  - def_list                      # Definition lists
+  - footnotes                     # Footnotes
+  - md_in_html                    # Markdown in HTML blocks
+  - tables                        # Enhanced table support
+  - toc:                          # Table of Contents
+      permalink: true             # Add permalink anchors to headers
+      toc_depth: 3                # Max heading depth in TOC
+
+  # PyMdown Extensions
+  - pymdownx.betterem:            # Better emphasis handling
+      smart_enable: all
+  - pymdownx.caret                # Superscript (^text^) and insert (^^text^^)
+  - pymdownx.mark                 # Highlighting (==text==)
+  - pymdownx.tilde                # Subscript (~text~) and strikethrough (~~text~~)
+  - pymdownx.critic               # Track changes markup
+  - pymdownx.details              # Collapsible sections
+  - pymdownx.emoji:               # Emoji support
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:           # Code syntax highlighting
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite         # Inline code highlighting
+  - pymdownx.keys                 # Keyboard key rendering (++ctrl+c++)
+  - pymdownx.magiclink:           # Auto-link URLs and references
+      normalize_issue_symbols: true
+  - pymdownx.smartsymbols         # Smart symbols (arrows, fractions, etc.)
+  - pymdownx.snippets:            # Include external files
+      check_paths: true
+  - pymdownx.superfences:         # Advanced code fences with custom renderers
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:              # Tabbed content blocks
       alternate_style: true
+  - pymdownx.tasklist:            # Task/checkbox lists
+      custom_checkbox: true
