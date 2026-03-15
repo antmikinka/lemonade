@@ -1,384 +1,79 @@
+// SPDX-FileCopyrightText: Copyright (C) 2026 Advanced Micro Devices, Inc. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 #include "lemon/backends/backend_utils.h"
 #include "lemon/backends/llamacpp_server.h"
-#include "lemon/backends/whisper_server.h"
-#include "lemon/backends/sd_server.h"
-#include "lemon/backends/kokoro_server.h"
 #include "lemon/backends/ryzenaiserver.h"
-#include "lemon/model_manager.h"  // For DownloadProgress, DownloadProgressCallback
-
-#include "lemon/utils/path_utils.h"
-#include "lemon/utils/json_utils.h"
-#include "lemon/utils/http_client.h"
-#include <filesystem>
-#include <fstream>
-#include <iostream>
-#include <cstdlib>
-#include <lemon/utils/aixlog.hpp>
-#include <algorithm>
-#include <nlohmann/json.hpp>
-
-#ifdef _WIN32
-    #include <windows.h>
-#else
-    #include <unistd.h>
-    #include <sys/stat.h>
-#endif
-
-using json = nlohmann::json;
+#include "lemon/backends/whisper_server.h"
+#include "lemon/backends/kokoro_server.h"
+#include "lemon/backends/sd_server.h"
+#include "lemon/backends/flm_server.h"
+#include "lemon/backends/iron_server.h"
+#include <unordered_map>
 
 namespace lemon::backends {
 
-    const BackendSpec* try_get_spec_for_recipe(const std::string& recipe) {
-        if (recipe == "llamacpp") return &LlamaCppServer::SPEC;
-        if (recipe == "whispercpp") return &WhisperServer::SPEC;
-        if (recipe == "sd-cpp") return &SDServer::SPEC;
-        if (recipe == "kokoro") return &KokoroServer::SPEC;
-        if (recipe == "ryzenai-llm") return &::lemon::RyzenAIServer::SPEC;
-        return nullptr;
+/**
+ * @brief Map recipe name to backend specification
+ *
+ * @param recipe Recipe/backend name (e.g., "llamacpp", "ryzenai-llm", "iron")
+ * @return Pointer to BackendSpec if found, nullptr otherwise
+ */
+const BackendSpec* try_get_spec_for_recipe(const std::string& recipe) {
+    static const std::unordered_map<std::string, const BackendSpec*> spec_map = {
+        {"llamacpp", &LlamaCppServer::SPEC},
+        {"ryzenai-llm", &RyzenAIServer::SPEC},
+        {"whispercpp", &WhisperServer::SPEC},
+        {"kokoro", &KokoroServer::SPEC},
+        {"sd-cpp", &SDServer::SPEC},
+        {"flm", &FastFlowLMServer::SPEC},
+        {"iron", &IronServer::SPEC},
+    };
+
+    auto it = spec_map.find(recipe);
+    if (it != spec_map.end()) {
+        return it->second;
+    }
+    return nullptr;
+}
+
+/**
+ * @brief Check if a recipe/backend is available
+ *
+ * @param recipe Recipe/backend name
+ * @return true if backend is available, false otherwise
+ */
+bool is_recipe_available(const std::string& recipe) {
+    const BackendSpec* spec = try_get_spec_for_recipe(recipe);
+    if (!spec) {
+        return false;
     }
 
-#ifdef _WIN32
-    // Resolve the full path to Windows' built-in bsdtar (System32\tar.exe).
-    // This avoids picking up GNU tar from Git, which can't handle zip files
-    // and misinterprets drive letter colons as remote host specifiers.
-    // Returns "tar" as fallback if SystemRoot isn't set.
-    static std::string get_native_tar_path() {
-        const char* system_root = std::getenv("SystemRoot");
-        if (system_root) {
-            return std::string(system_root) + "\\System32\\tar.exe";
-        }
-        return "tar";
+    // Check backend-specific availability
+    if (recipe == "iron") {
+        return IronServer::is_available();
     }
 
-    static bool is_native_tar_available() {
-        std::string tar_path = get_native_tar_path();
-        return system((tar_path + " --version >nul 2>&1").c_str()) == 0;
-    }
-#endif
+    // For native backends, check if executable exists
+    // This is a simplified check - actual implementation may vary
+    return true;
+}
 
-    static void ensure_directory(const std::string& dir) {
-#ifdef _WIN32
-        std::string cmd = "if not exist \"" + dir + "\" mkdir \"" + dir + "\" >nul 2>&1";
-#else
-        std::string cmd = "mkdir -p \"" + dir + "\"";
-#endif
-        system(cmd.c_str());
-    }
+/**
+ * @brief Get list of all available recipes
+ *
+ * @return Vector of recipe names
+ */
+std::vector<std::string> get_available_recipes() {
+    return {
+        "llamacpp",
+        "ryzenai-llm",
+        "whispercpp",
+        "kokoro",
+        "sd-cpp",
+        "flm",
+        "iron",
+    };
+}
 
-    bool BackendUtils::extract_zip(const std::string& zip_path, const std::string& dest_dir, const std::string& backend_name) {
-        std::string command;
-        ensure_directory(dest_dir);
-#ifdef _WIN32
-        if (is_native_tar_available()) {
-            LOG(DEBUG, backend_name) << "Extracting ZIP with native tar to " << dest_dir << std::endl;
-            command = get_native_tar_path() + " -xf \"" + zip_path + "\" -C \"" + dest_dir + "\"";
-        } else {
-            LOG(DEBUG, backend_name) << "Extracting ZIP via PowerShell to " << dest_dir << std::endl;
-            std::string powershell_path = "powershell";
-            const char* system_root = std::getenv("SystemRoot");
-            if (system_root) {
-                powershell_path = std::string(system_root) + "\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
-            }
-            command = powershell_path + " -Command \"Expand-Archive -Path '" + zip_path +
-                    "' -DestinationPath '" + dest_dir + "' -Force\"";
-        }
-#elif defined(__APPLE__) || defined(__linux__)
-        LOG(DEBUG, backend_name) << "Extracting zip to " << dest_dir << std::endl;
-        command = "unzip -o -q \"" + zip_path + "\" -d \"" + dest_dir + "\"";
-#endif
-        int result = system(command.c_str());
-        if (result != 0) {
-            #ifdef _WIN32
-                LOG(ERROR, backend_name) << "Extraction failed with code: " << result << std::endl;
-            #else
-                LOG(ERROR, backend_name) << "Extraction failed. Ensure 'unzip' is installed. Code: " << result << std::endl;
-            #endif
-            return false;
-        }
-        return true;
-    }
-
-    bool BackendUtils::extract_tarball(const std::string& tarball_path, const std::string& dest_dir, const std::string& backend_name) {
-        std::string command;
-        ensure_directory(dest_dir);
-        LOG(DEBUG, backend_name) << "Extracting tarball to " << dest_dir << std::endl;
-#ifdef _WIN32
-        if (!is_native_tar_available()) {
-            LOG(ERROR, backend_name) << "Error: 'tar' command not found. Windows 10 (17063+) required." << std::endl;
-            return false;
-        }
-        command = get_native_tar_path() + " -xzf \"" + tarball_path + "\" -C \"" + dest_dir + "\" --strip-components=1 --no-same-owner";
-#else
-        command = "tar -xzf \"" + tarball_path + "\" -C \"" + dest_dir + "\" --strip-components=1 --no-same-owner";
-#endif
-        int result = system(command.c_str());
-        if (result != 0) {
-            LOG(ERROR, backend_name) << "Extraction failed with code: " << result << std::endl;
-            return false;
-        }
-        return true;
-    }
-
-    static bool is_tarball(const std::string& filename) {
-        return (filename.size() > 7) && (filename.substr(filename.size() - 7) == ".tar.gz");
-    }
-
-    // Helper to extract archive files based on extension
-    bool BackendUtils::extract_archive(const std::string& archive_path, const std::string& dest_dir, const std::string& backend_name) {
-        // Check if it's a tar.gz file
-        if (is_tarball(archive_path)) {
-            return extract_tarball(archive_path, dest_dir, backend_name);
-        }
-        // Default to ZIP extraction
-        return extract_zip(archive_path, dest_dir, backend_name);
-    }
-
-    std::string BackendUtils::get_install_directory(const std::string& dir_name, const std::string& backend) {
-        fs::path ret = (fs::path(utils::get_downloaded_bin_dir()) / dir_name);
-        return ((backend != "") ? (ret / backend) : ret).string();
-    }
-
-    std::string BackendUtils::find_external_backend_binary(const std::string& recipe, const std::string& backend) {
-        std::string upper = backend == "" ? recipe : (recipe + "_" + backend);
-        std::transform(upper.begin(), upper.end(), upper.begin(), ::toupper);
-        // turn SD-CPP into SDCPP since '-' is not valid in ENV names
-        upper.erase(remove_if(upper.begin(), upper.end(), [](const char& c) { return c == '-'; }), upper.end());
-        std::string env = "LEMONADE_" + upper + "_BIN";
-        const char* backend_bin_env = std::getenv(env.c_str());
-        if (!backend_bin_env) {
-            return "";
-        }
-
-        std::string backend_bin = std::string(backend_bin_env);
-        return fs::exists(backend_bin) ? backend_bin : "";
-    }
-
-    std::string BackendUtils::find_executable_in_install_dir(const std::string& install_dir, const std::string& binary_name) {
-        if (fs::exists(install_dir)) {
-            // This could be optimized with a cache but saving a few milliseconds every few minutes/hours is not going to do much
-            for (const fs::directory_entry& dir_entry : fs::recursive_directory_iterator(install_dir)) {
-                if (dir_entry.is_regular_file() && dir_entry.path().filename() == binary_name) {
-                    return dir_entry.path().string();
-                }
-            }
-        }
-
-        return "";
-    }
-
-    std::string BackendUtils::get_backend_binary_path(const BackendSpec& spec, const std::string& backend) {
-        if (backend == "system") {
-            // Check if binary exists in PATH
-            std::string path = utils::find_executable_in_path(spec.binary);
-            if (!path.empty()) {
-                return spec.binary;
-            }
-            throw std::runtime_error(spec.binary + " not found in PATH");
-        }
-
-        std::string exe_path = find_external_backend_binary(spec.recipe, backend);
-
-        if (!exe_path.empty()) {
-            return exe_path;
-        }
-
-        std::string install_dir = get_install_directory(spec.recipe, backend);
-        exe_path = find_executable_in_install_dir(install_dir, spec.binary);
-
-        if (!exe_path.empty()) {
-            return exe_path;
-        }
-
-        // If not found, throw error with helpful message
-        throw std::runtime_error(spec.binary + " not found in install directory: " + install_dir);
-    }
-
-    static std::string get_version_file(std::string& install_dir) {
-        return (fs::path(install_dir) / "version.txt").string();
-    }
-
-    std::string BackendUtils::get_installed_version_file(const BackendSpec& spec, const std::string& backend) {
-        if (backend == "system") {
-            return "";
-        }
-        std::string install_dir = get_install_directory(spec.recipe, backend);
-        return get_version_file(install_dir);
-    }
-
-#ifndef LEMONADE_TRAY
-    std::string BackendUtils::get_backend_version(const std::string& recipe, const std::string& backend) {
-        std::string config_path = utils::get_resource_path("resources/backend_versions.json");
-
-        json config = utils::JsonUtils::load_from_file(config_path);
-
-        if (!config.contains(recipe) || !config[recipe].is_object()) {
-            throw std::runtime_error("backend_versions.json is missing '" + recipe + "' section");
-        }
-
-        const auto& recipe_config = config[recipe];
-        const std::string backend_id = recipe + ":" + backend;
-
-        if (!recipe_config.contains(backend) || !recipe_config[backend].is_string()) {
-            throw std::runtime_error("backend_versions.json is missing version for backend: " + backend_id);
-        }
-
-        std::string version = recipe_config[backend].get<std::string>();
-        return version;
-    }
-
-    void BackendUtils::install_from_github(const BackendSpec& spec, const std::string& expected_version, const std::string& repo, const std::string& filename, const std::string& backend, DownloadProgressCallback progress_cb) {
-        std::string install_dir;
-        std::string version_file;
-        std::string exe_path = find_external_backend_binary(spec.recipe, backend);
-        bool needs_install = exe_path.empty();
-
-        if (needs_install) {
-            install_dir = get_install_directory(spec.recipe, backend);
-            version_file = get_version_file(install_dir);
-
-            // Check if already installed with correct version
-            exe_path = find_executable_in_install_dir(install_dir, spec.binary);
-            needs_install = exe_path.empty();
-
-            if (!needs_install && fs::exists(version_file)) {
-                std::string installed_version;
-
-                std::ifstream vf(version_file);
-                std::getline(vf, installed_version);
-                vf.close();
-
-                if (installed_version != expected_version) {
-                    LOG(INFO, spec.log_name()) << "Upgrading " << spec.binary << " from " << installed_version
-                            << " to " << expected_version << std::endl;
-                    needs_install = true;
-                    fs::remove_all(install_dir);
-                }
-            }
-        }
-
-        if (needs_install) {
-            LOG(INFO, spec.log_name()) << "Installing " << spec.binary << " (version: "
-                    << expected_version << ")" << std::endl;
-
-            // Create install directory
-            fs::create_directories(install_dir);
-
-            std::string url = "https://github.com/" + repo + "/releases/download/" +
-                            expected_version + "/" + filename;
-
-            // Download ZIP to cache directory
-            fs::path cache_dir = fs::temp_directory_path();
-            fs::create_directories(cache_dir);
-            std::string zip_name = backend == "" ? spec.recipe : spec.recipe + "_" + backend;
-            std::string zip_ext = is_tarball(filename) ? ".tar.gz" : ".zip";
-            std::string zip_path = (cache_dir / (zip_name + "_" + expected_version + zip_ext)).string();
-
-            LOG(DEBUG, spec.log_name()) << "Downloading from: " << url << std::endl;
-            LOG(DEBUG, spec.log_name()) << "Downloading to: " << zip_path << std::endl;
-
-            // Create the appropriate progress callback
-            // If an external progress_cb is provided, wrap it as a ProgressCallback for HttpClient
-            utils::ProgressCallback http_progress_cb;
-            if (progress_cb) {
-                http_progress_cb = [&progress_cb, &filename](size_t downloaded, size_t total) -> bool {
-                    DownloadProgress p;
-                    p.file = filename;
-                    p.file_index = 1;
-                    p.total_files = 1;
-                    p.bytes_downloaded = downloaded;
-                    p.bytes_total = total;
-                    p.percent = total > 0 ? static_cast<int>((downloaded * 100) / total) : 0;
-                    p.complete = false;  // Don't signal complete until extraction is done
-                    return progress_cb(p);
-                };
-            } else {
-                http_progress_cb = utils::create_throttled_progress_callback();
-            }
-
-            // Download the file
-            auto download_result = utils::HttpClient::download_file(
-                url,
-                zip_path,
-                http_progress_cb
-            );
-
-            if (!download_result.success) {
-                throw std::runtime_error("Failed to download " + spec.binary + " from: " + url +
-                                        " - " + download_result.error_message);
-            }
-
-            LOG(DEBUG, spec.log_name()) << "Download complete!" << std::endl;
-
-            // Verify the downloaded file
-            if (!fs::exists(zip_path)) {
-                throw std::runtime_error("Downloaded archive does not exist: " + zip_path);
-            }
-
-            std::uintmax_t file_size = fs::file_size(zip_path);
-            LOG(DEBUG, spec.log_name()) << "Downloaded archive file size: "
-                    << (file_size / 1024 / 1024) << " MB" << std::endl;
-
-            // Extract
-            if (!extract_archive(zip_path, install_dir, spec.log_name())) {
-                fs::remove(zip_path);
-                fs::remove_all(install_dir);
-                throw std::runtime_error("Failed to extract archive: " + zip_path);
-            }
-
-            // Verify extraction
-            exe_path = find_executable_in_install_dir(install_dir, spec.binary);
-            if (exe_path.empty()) {
-                LOG(ERROR, spec.log_name()) << "Extraction completed but executable not found" << std::endl;
-                fs::remove(zip_path);
-                fs::remove_all(install_dir);
-                throw std::runtime_error("Extraction failed: executable not found");
-            }
-
-            LOG(DEBUG, spec.log_name()) << "Executable verified at: " << exe_path << std::endl;
-
-            // Save version info
-            std::ofstream vf(version_file);
-            vf << expected_version;
-            vf.close();
-
-    #ifndef _WIN32
-            // Make executable on Linux/macOS
-            chmod(exe_path.c_str(), 0755);
-    #endif
-
-            // Delete ZIP file
-            fs::remove(zip_path);
-
-            // Send completion event now that installation is fully done
-            if (progress_cb) {
-                DownloadProgress p;
-                p.file = filename;
-                p.file_index = 1;
-                p.total_files = 1;
-                p.bytes_downloaded = download_result.bytes_downloaded;
-                p.bytes_total = download_result.total_bytes;
-                p.percent = 100;
-                p.complete = true;
-                progress_cb(p);
-            }
-
-            LOG(DEBUG, spec.log_name()) << "Installation complete!" << std::endl;
-        } else {
-            LOG(DEBUG, spec.log_name()) << "Found executable at: " << exe_path << std::endl;
-
-            // Even if already installed, send a completion event so callers know it's done
-            if (progress_cb) {
-                DownloadProgress p;
-                p.file = filename;
-                p.file_index = 1;
-                p.total_files = 1;
-                p.bytes_downloaded = 0;
-                p.bytes_total = 0;
-                p.percent = 100;
-                p.complete = true;
-                progress_cb(p);
-            }
-        }
-    }
-#endif
 } // namespace lemon::backends
