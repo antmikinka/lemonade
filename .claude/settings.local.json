@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git checkout main)",
+      "Bash(git checkout -b team-tracking-dash)",
+      "mcp__sequential-thinking__sequentialthinking",
+      "Bash(npm run build:renderer:prod)",
+      "Bash(git checkout team-tracking-dash)",
+      "Bash(npm run build:renderer)",
+      "Bash(npm install)",
+      "Bash(git add -A)"
+    ]
+  }
+}

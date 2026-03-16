@@ -41,14 +41,17 @@
     "webpack-dev-server": "^5.2.3"
   },
   "dependencies": {
+    "@octokit/rest": "^21.0.0",
     "@types/markdown-it": "^14.1.2",
+    "@types/react-window": "^1.8.8",
     "eventsource": "^4.1.0",
     "highlight.js": "^11.11.1",
     "katex": "^0.16.25",
     "markdown-it": "^14.1.0",
     "markdown-it-texmath": "^1.0.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "react-window": "^1.8.11"
   },
   "overrides": {
     "serialize-javascript": "^7.0.3"
