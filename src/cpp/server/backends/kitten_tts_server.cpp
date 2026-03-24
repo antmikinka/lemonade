@@ -23,12 +23,12 @@ namespace backends {
 
 InstallParams KittenTtsServer::get_install_params(const std::string& /*backend*/, const std::string& version) {
     InstallParams params;
-    params.repo = "second-state/kitten_tts_rs";
+    params.repo = "lemonade-sdk/kitten-tts";
 
 #ifdef _WIN32
-    params.filename = "kitten-tts-x86_64-windows.zip";
+    params.filename = "kitten-tts-server-windows-x86_64.tar.gz";
 #elif defined(__linux__)
-    params.filename = "kitten-tts-x86_64-linux.tar.gz";
+    params.filename = "kitten-tts-server-linux-x86_64.tar.gz";
 #else
     throw std::runtime_error("Unsupported platform for kitten-tts");
 #endif

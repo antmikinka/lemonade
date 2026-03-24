@@ -5,7 +5,7 @@ if(MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
-project(lemon_cpp VERSION 9.4.2)
+project(lemon_cpp VERSION 10.0.0)
 
 # Export compile_commands.json for clangd/IntelliSense
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -299,6 +299,74 @@ if(WIN32 OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
     message(STATUS "IXWebSocket will be fetched (v${MIN_IXWEBSOCKET_VERSION})")
 endif()
 
+# ============================================================
+# KittenTTS Dependencies (for kitten-tts-server executable)
+# ============================================================
+
+# ONNX Runtime - try conda environment first, then FetchContent
+if(DEFINED ENV{CONDA_PREFIX})
+    # Try to find ONNX Runtime headers in conda environment
+    file(GLOB CONDA_ONNX_PATHS "$ENV{CONDA_PREFIX}/**/onnxruntime*/include")
+    foreach(path ${CONDA_ONNX_PATHS})
+        if(EXISTS "${path}/onnxruntime_cxx_api.h")
+            set(ONNXRUNTIME_CONDA_INCLUDE_DIR "${path}")
+            message(STATUS "Using ONNX Runtime from conda: ${path}")
+            break()
+        endif()
+    endforeach()
+endif()
+
+if(NOT DEFINED ONNXRUNTIME_CONDA_INCLUDE_DIR)
+    # Fallback: fetch ONNX Runtime from GitHub
+    set(MIN_ONNXRUNTIME_VERSION "1.18.0")
+    FetchContent_Declare(onnxruntime
+        GIT_REPOSITORY https://github.com/microsoft/onnxruntime.git
+        GIT_TAG v${MIN_ONNXRUNTIME_VERSION}
+        EXCLUDE_FROM_ALL
+    )
+    set(onnxruntime_BUILD_SHARED_LIB OFF CACHE INTERNAL "")
+    set(onnxruntime_BUILD_EXECUTABLE OFF CACHE INTERNAL "")
+    set(onnxruntime_ENABLE_CPUINFO OFF CACHE INTERNAL "")
+    set(onnxruntime_ENABLE_THREADPOOL OFF CACHE INTERNAL "")
+    set(onnxruntime_ENABLE_NLP_MODEL OFF CACHE INTERNAL "")
+    set(onnxruntime_ENABLE_TRAINING OFF CACHE INTERNAL "")
+    set(onnxruntime_ENABLE_TRAINING_OPS OFF CACHE INTERNAL "")
+    set(onnxruntime_USE_MIMALLOC OFF CACHE INTERNAL "")
+    set(onnxruntime_USE_TVM OFF CACHE INTERNAL "")
+    set(onnxruntime_USE_WEBAssembly OFF CACHE INTERNAL "")
+    set(onnxruntime_USE_COREML OFF CACHE INTERNAL "")
+    set(onnxruntime_USE_CUDA OFF CACHE INTERNAL "")
+    set(onnxruntime_USE_ROCM OFF CACHE INTERNAL "")
+    set(onnxruntime_USE_TRT OFF CACHE INTERNAL "")
+    set(onnxruntime_USE_DNNL OFF CACHE INTERNAL "")
+    set(onnxruntime_USE_OPENVINO OFF CACHE INTERNAL "")
+    FetchContent_MakeAvailable(onnxruntime)
+    message(STATUS "ONNX Runtime will be fetched (v${MIN_ONNXRUNTIME_VERSION})")
+endif()
+
+# espeak-ng - for phonemization (text-to-phoneme conversion)
+# We build a minimal static library with only the phonemizer
+set(MIN_ESPEAK_NG_VERSION "1.50")
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(ESPEAK_NG QUIET espeak-ng>=${MIN_ESPEAK_NG_VERSION})
+endif()
+if(ESPEAK_NG_FOUND)
+    message(STATUS "System espeak-ng found (version ${ESPEAK_NG_VERSION})")
+else()
+    message(STATUS "System espeak-ng not found, will fetch from GitHub")
+    FetchContent_Declare(espeak
+        GIT_REPOSITORY https://github.com/espeak-ng/espeak-ng.git
+        GIT_TAG ${MIN_ESPEAK_NG_VERSION}
+        SOURCE_SUBDIR src
+        EXCLUDE_FROM_ALL
+    )
+    set(ESPEAK_NG_BUILD_STATIC ON CACHE INTERNAL "")
+    set(ESPEAK_NG_BUILD_TESTS OFF CACHE INTERNAL "")
+    set(ESPEAK_NG_BUILD_TOOLS OFF CACHE INTERNAL "")
+    set(ESPEAK_NG_BUILD_LIBESPEAK_NG ON CACHE INTERNAL "")
+    FetchContent_MakeAvailable(espeak)
+endif()
 
 # Use brotli for compression on macOS
 if(APPLE)
@@ -745,6 +813,62 @@ add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
 
 # Ensure resources are copied before building the executable
 add_dependencies(${EXECUTABLE_NAME} copy_resources)
+
+# ============================================================
+# Application: kitten-tts-server (standalone TTS executable)
+# ============================================================
+# NOTE: KittenTTS is now distributed as a pre-built binary (like Kokoro).
+# The kitten-tts-server executable is built separately and downloaded from HuggingFace.
+# The source files in src/cpp/server/kitten-tts-server/ and
+# src/cpp/server/backends/kitten_tts_*.cpp are used to build the pre-built binary.
+#
+# To build the pre-built binary, use:
+#   - scripts/build-kitten-tts.sh (Linux)
+#   - scripts/build-kitten-tts.bat (Windows)
+#
+# The following lines are kept for reference but commented out:
+#
+# set(KITTEN_TTS_EXE_NAME "kitten-tts-server")
+# set(KITTEN_TTS_SOURCES
+#     src/cpp/server/kitten-tts-server/main.cpp
+#     src/cpp/server/backends/kitten_tts_native.cpp
+#     src/cpp/server/backends/kitten_tts_onnx_model.cpp
+#     src/cpp/server/backends/kitten_tts_phonemizer.cpp
+#     src/cpp/server/backends/kitten_tts_voice.cpp
+#     src/cpp/server/backends/kitten_tts_preprocessor.cpp
+#     src/cpp/server/utils/npz_reader.cpp
+# )
+# add_executable(${KITTEN_TTS_EXE_NAME} ${KITTEN_TTS_SOURCES})
+# target_include_directories(${KITTEN_TTS_EXE_NAME} PRIVATE
+#     ${CMAKE_CURRENT_SOURCE_DIR}/src/cpp/include
+#     ${CMAKE_CURRENT_BINARY_DIR}/include
+#     ${CMAKE_CURRENT_BINARY_DIR}
+# )
+# if(DEFINED ONNXRUNTIME_CONDA_INCLUDE_DIR)
+#     target_include_directories(${KITTEN_TTS_EXE_NAME} PRIVATE ${ONNXRUNTIME_CONDA_INCLUDE_DIR})
+# else()
+#     target_include_directories(${KITTEN_TTS_EXE_NAME} PRIVATE ${onnxruntime_SOURCE_DIR}/include)
+# endif()
+# target_link_libraries(${KITTEN_TTS_EXE_NAME} PRIVATE
+#     httplib::httplib
+#     nlohmann_json::nlohmann_json
+#     onnxruntime
+# )
+# if(ESPEAK_NG_FOUND)
+#     target_link_libraries(${KITTEN_TTS_EXE_NAME} PRIVATE ${ESPEAK_NG_LIBRARIES})
+#     target_include_directories(${KITTEN_TTS_EXE_NAME} PRIVATE ${ESPEAK_NG_INCLUDE_DIRS})
+# else()
+#     target_link_libraries(${KITTEN_TTS_EXE_NAME} PRIVATE espeak-ng)
+# endif()
+# if(WIN32)
+#     target_link_libraries(${KITTEN_TTS_EXE_NAME} PRIVATE ws2_32 wsock32)
+# elseif(APPLE)
+#     target_link_libraries(${KITTEN_TTS_EXE_NAME} PRIVATE "-framework Foundation" "-framework CoreServices")
+# endif()
+# set_target_properties(${KITTEN_TTS_EXE_NAME} PROPERTIES
+#     RUNTIME_OUTPUT_DIRECTORY $<TARGET_FILE_DIR:${EXECUTABLE_NAME}>
+# )
+# message(STATUS "KittenTTS server executable configured: ${KITTEN_TTS_EXE_NAME}")
 
 # ============================================================
 # Electron App Integration (Cross-Platform)
