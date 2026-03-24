@@ -138,6 +138,11 @@ static const std::vector<RecipeBackendDef> RECIPE_DEFS = {
         {"cpu", {"x86_64"}},
     }},
 
+    // kitten-tts - Windows/Linux x86_64
+    {"kitten-tts", "cpu", {"windows", "linux"}, {
+        {"cpu", {"x86_64"}},
+    }},
+
     // stable-diffusion.cpp - ROCm backend for AMD GPUs
     {"sd-cpp", "rocm", {"windows", "linux"}, {
         {"amd_igpu", {

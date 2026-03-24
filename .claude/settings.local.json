@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__clear-thought-server__sequentialthinking",
+      "Bash(git checkout:*)",
+      "Bash(git restore:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git pull:*)",
+      "WebFetch(domain:github.com)",
+      "mcp__sequential-thinking__sequentialthinking",
+      "Bash(curl -s https://raw.githubusercontent.com/antmikinka/kitten_tts_rs/refs/heads/main/README.md)",
+      "Bash(mkdir -p src/cpp/build)",
+      "Bash(cmake ..)",
+      "Bash(cmake --build . --config Release --target lemonade-router -j)"
+    ]
+  }
+}

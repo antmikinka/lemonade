@@ -4,6 +4,7 @@
 #include "lemon/backends/ryzenaiserver.h"
 #include "lemon/backends/whisper_server.h"
 #include "lemon/backends/kokoro_server.h"
+#include "lemon/backends/kitten_tts_server.h"
 #include "lemon/backends/sd_server.h"
 #include "lemon/server_capabilities.h"
 #include "lemon/error_types.h"
@@ -184,6 +185,9 @@ std::unique_ptr<WrappedServer> Router::create_backend_server(const ModelInfo& mo
     } else if (model_info.recipe == "kokoro") {
     LOG(DEBUG, "Router") << "Creating Kokoro backend" << std::endl;
         new_server = std::make_unique<backends::KokoroServer>(log_level_, model_manager_, backend_manager_);
+    } else if (model_info.recipe == "kitten-tts") {
+    LOG(DEBUG, "Router") << "Creating KittenTtsServer backend" << std::endl;
+        new_server = std::make_unique<backends::KittenTtsServer>(log_level_, model_manager_, backend_manager_);
     } else if (model_info.recipe == "sd-cpp") {
     LOG(DEBUG, "Router") << "Creating SDServer backend" << std::endl;
         new_server = std::make_unique<backends::SDServer>(log_level_, model_manager_, backend_manager_);

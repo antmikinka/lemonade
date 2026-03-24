@@ -26,5 +26,8 @@
   "kokoro": {
     "cpu": "b14"
   },
+  "kitten-tts": {
+    "cpu": "v0.1.0"
+  },
   "clear_bin_if_lemonade_below": "9.4.0"
 }

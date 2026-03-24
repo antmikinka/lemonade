@@ -1,0 +1,454 @@
+/**
+ * Agent Progress Component Styles.
+ *
+ * Styles for displaying agent pipeline execution progress.
+ */
+
+/* ============================================================================
+   Main Container
+   ============================================================================ */
+
+.agent-progress {
+  background: var(--card-background, #1e1e1e);
+  border: 1px solid var(--card-border, #333);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin: 1rem 0;
+  font-family: var(--font-family, 'Inter', sans-serif);
+}
+
+.agent-progress--idle {
+  border-color: var(--color-muted, #666);
+}
+
+.agent-progress--running {
+  border-color: var(--color-primary, #007bff);
+  box-shadow: 0 0 10px rgba(0, 123, 255, 0.2);
+}
+
+.agent-progress--complete {
+  border-color: var(--color-success, #28a745);
+}
+
+.agent-progress--error {
+  border-color: var(--color-danger, #dc3545);
+}
+
+.agent-progress--cancelled {
+  border-color: var(--color-warning, #ffc107);
+}
+
+/* ============================================================================
+   Header
+   ============================================================================ */
+
+.agent-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.agent-progress-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+}
+
+.agent-progress-status {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.status-indicator {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  background: var(--color-muted, #444);
+  color: var(--text-secondary, #aaa);
+}
+
+.status-indicator--idle {
+  background: var(--color-muted, #444);
+  color: var(--text-secondary, #aaa);
+}
+
+.status-indicator--running {
+  background: var(--color-primary, #007bff);
+  color: #fff;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.status-indicator--complete {
+  background: var(--color-success, #28a745);
+  color: #fff;
+}
+
+.status-indicator--error {
+  background: var(--color-danger, #dc3545);
+  color: #fff;
+}
+
+.status-indicator--cancelled {
+  background: var(--color-warning, #ffc107);
+  color: #000;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.session-id {
+  font-family: var(--font-mono, 'Fira Code', monospace);
+  font-size: 0.75rem;
+  color: var(--text-muted, #888);
+}
+
+.connection-indicator {
+  font-size: 0.75rem;
+}
+
+.connection-indicator.connected {
+  color: var(--color-success, #28a745);
+}
+
+.connection-indicator.disconnected {
+  color: var(--color-danger, #dc3545);
+}
+
+/* ============================================================================
+   Progress Bar
+   ============================================================================ */
+
+.agent-progress-bar-container {
+  position: relative;
+  height: 8px;
+  background: var(--color-muted, #333);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+}
+
+.agent-progress-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    var(--color-primary, #007bff),
+    var(--color-primary-light, #0096ff)
+  );
+  transition: width 0.3s ease;
+}
+
+.agent-progress-percentage {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+}
+
+/* ============================================================================
+   Agent Steps
+   ============================================================================ */
+
+.agent-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.agent-step {
+  border: 1px solid var(--card-border, #333);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--card-background-alt, #252525);
+}
+
+.agent-step--pending {
+  border-color: var(--color-muted, #444);
+}
+
+.agent-step--running {
+  border-color: var(--color-primary, #007bff);
+  animation: border-pulse 1.5s ease-in-out infinite;
+}
+
+.agent-step--completed {
+  border-color: var(--color-success, #28a745);
+}
+
+.agent-step--error {
+  border-color: var(--color-danger, #dc3545);
+}
+
+@keyframes border-pulse {
+  0%, 100% {
+    border-color: var(--color-primary, #007bff);
+  }
+  50% {
+    border-color: var(--color-primary-light, #0096ff);
+  }
+}
+
+.agent-step-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s ease;
+}
+
+.agent-step-header:hover {
+  background: var(--card-background-hover, #2a2a2a);
+}
+
+.agent-step-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted, #888);
+}
+
+.agent-step-icon--pending {
+  color: var(--text-muted, #888);
+}
+
+.agent-step-icon--running {
+  color: var(--color-primary, #007bff);
+}
+
+.agent-step-icon--completed {
+  color: var(--color-success, #28a745);
+}
+
+.agent-step-icon--error {
+  color: var(--color-danger, #dc3545);
+}
+
+.agent-step-name {
+  flex: 1;
+  font-weight: 500;
+  color: var(--text-primary, #fff);
+}
+
+.agent-step-status {
+  font-size: 0.8rem;
+  color: var(--text-secondary, #aaa);
+  text-transform: capitalize;
+}
+
+.agent-step-confidence {
+  font-size: 0.75rem;
+  color: var(--text-muted, #888);
+  padding: 0.15rem 0.5rem;
+  background: var(--color-muted, #333);
+  border-radius: 4px;
+}
+
+.agent-step-toggle {
+  font-size: 0.65rem;
+  color: var(--text-muted, #888);
+}
+
+.agent-step-details {
+  padding: 1rem;
+  border-top: 1px solid var(--card-border, #333);
+  background: var(--card-background-deeper, #1a1a1a);
+}
+
+.agent-step-reasoning h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary, #aaa);
+}
+
+.agent-step-reasoning pre {
+  margin: 0;
+  padding: 0.75rem;
+  background: var(--code-background, #0d0d0d);
+  border-radius: 4px;
+  font-family: var(--font-mono, 'Fira Code', monospace);
+  font-size: 0.8rem;
+  color: var(--code-text, #e0e0e0);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.agent-step-error {
+  padding: 0.75rem 1rem;
+  background: rgba(220, 53, 69, 0.1);
+  border-top: 1px solid var(--color-danger, #dc3545);
+  color: var(--color-danger, #dc3545);
+  font-size: 0.85rem;
+}
+
+/* ============================================================================
+   Results Summary
+   ============================================================================ */
+
+.agent-results-summary {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: var(--card-background-alt, #252525);
+  border-radius: 6px;
+}
+
+.agent-results-summary h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+}
+
+.results-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.result-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  background: var(--card-background, #1e1e1e);
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.result-item strong {
+  color: var(--text-primary, #fff);
+}
+
+.result-item span {
+  color: var(--text-secondary, #aaa);
+  font-size: 0.8rem;
+}
+
+/* ============================================================================
+   Input Section
+   ============================================================================ */
+
+.agent-input-section {
+  margin-bottom: 1.5rem;
+}
+
+.agent-input-textarea {
+  width: 100%;
+  padding: 0.75rem;
+  background: var(--input-background, #252525);
+  border: 1px solid var(--input-border, #444);
+  border-radius: 6px;
+  color: var(--text-primary, #fff);
+  font-family: var(--font-family, 'Inter', sans-serif);
+  font-size: 0.9rem;
+  resize: vertical;
+  transition: border-color 0.2s ease;
+}
+
+.agent-input-textarea:focus {
+  outline: none;
+  border-color: var(--color-primary, #007bff);
+}
+
+.agent-input-textarea::placeholder {
+  color: var(--text-muted, #666);
+}
+
+/* ============================================================================
+   Control Buttons
+   ============================================================================ */
+
+.agent-progress-controls {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.btn {
+  padding: 0.6rem 1.25rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--color-primary, #007bff);
+  color: #fff;
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: var(--color-primary-light, #0096ff);
+}
+
+.btn--secondary {
+  background: var(--color-muted, #444);
+  color: #fff;
+}
+
+.btn--secondary:hover:not(:disabled) {
+  background: var(--color-muted-light, #555);
+}
+
+.btn--danger {
+  background: var(--color-danger, #dc3545);
+  color: #fff;
+}
+
+.btn--danger:hover:not(:disabled) {
+  background: #c82333;
+}
+
+.connection-warning {
+  font-size: 0.8rem;
+  color: var(--color-warning, #ffc107);
+  margin-left: auto;
+}
+
+/* ============================================================================
+   Error Display
+   ============================================================================ */
+
+.agent-error-display {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background: rgba(220, 53, 69, 0.1);
+  border: 1px solid var(--color-danger, #dc3545);
+  border-radius: 6px;
+  color: var(--color-danger, #dc3545);
+  font-size: 0.85rem;
+}
+
+.agent-error-display strong {
+  margin-right: 0.5rem;
+}

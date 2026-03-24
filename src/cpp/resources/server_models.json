@@ -1434,6 +1434,36 @@
         ],
         "size": 0.34
     },
+    "kitten-tts-mini": {
+        "checkpoint": "KittenML/kitten-tts-mini-0.8",
+        "recipe": "kitten-tts",
+        "suggested": true,
+        "labels": [
+            "tts",
+            "speech"
+        ],
+        "size": 0.080
+    },
+    "kitten-tts-micro": {
+        "checkpoint": "KittenML/kitten-tts-micro-0.8",
+        "recipe": "kitten-tts",
+        "suggested": true,
+        "labels": [
+            "tts",
+            "speech"
+        ],
+        "size": 0.041
+    },
+    "kitten-tts-nano": {
+        "checkpoint": "KittenML/kitten-tts-nano-0.8-int8",
+        "recipe": "kitten-tts",
+        "suggested": true,
+        "labels": [
+            "tts",
+            "speech"
+        ],
+        "size": 0.025
+    },
     "Qwen2.5-3B-Instruct-FLM": {
         "checkpoint": "qwen2.5-it:3b",
         "recipe": "flm",

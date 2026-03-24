@@ -481,6 +481,12 @@ std::string ModelManager::resolve_model_path(const ModelInfo& info, const std::s
         return model_cache_path;  // Return directory even if index not found
     }
 
+    // For kitten-tts models, return the model directory
+    // kitten-tts-server expects a directory containing the model files
+    if (info.recipe == "kitten-tts") {
+        return model_cache_path;
+    }
+
     // For whispercpp, find the .bin model file
     if (info.recipe == "whispercpp" && variant.empty()) {
         // No variant specified - use fallback logic to find any .bin file

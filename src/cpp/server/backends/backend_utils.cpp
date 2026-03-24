@@ -3,6 +3,7 @@
 #include "lemon/backends/whisper_server.h"
 #include "lemon/backends/sd_server.h"
 #include "lemon/backends/kokoro_server.h"
+#include "lemon/backends/kitten_tts_server.h"
 #include "lemon/backends/ryzenaiserver.h"
 #include "lemon/model_manager.h"  // For DownloadProgress, DownloadProgressCallback
 
@@ -33,6 +34,7 @@ namespace lemon::backends {
         if (recipe == "whispercpp") return &WhisperServer::SPEC;
         if (recipe == "sd-cpp") return &SDServer::SPEC;
         if (recipe == "kokoro") return &KokoroServer::SPEC;
+        if (recipe == "kitten-tts") return &KittenTtsServer::SPEC;
         if (recipe == "ryzenai-llm") return &::lemon::RyzenAIServer::SPEC;
         return nullptr;
     }
