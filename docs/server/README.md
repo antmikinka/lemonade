@@ -17,7 +17,7 @@ Once you've installed, we recommend checking out these resources:
 |---------------|-------------|
 | [Supported Applications](./apps/README.md) | Explore applications that work out-of-the-box with Lemonade Server. |
 | [Lemonade Server Concepts](./concepts.md) | Background knowledge about local LLM servers and the OpenAI standard. |
-| [Python SDK (`lemonade-api`)](./python_sdk.md) | Official Python client with type-safe Pydantic models for all endpoints. |
+| [Python SDK](./python_sdk.md) | Official Python client with type-safe Pydantic models for all endpoints. |
 | [`lemonade-server` CLI Guide](./lemonade-server-cli.md) | Learn how to manage the server process and install new models using the command-line interface. |
 | [Models List](./server_models.md) | Browse a curated set of LLMs available for serving. |
 | [Server Spec](./server_spec.md) | Review all supported OpenAI-compatible and Lemonade-specific API endpoints. |
@@ -31,7 +31,7 @@ Lemonade Server can be integrated using the **official Python SDK**, any **OpenA
 
 ### Option 1: Lemonade Python SDK (Recommended for Python)
 
-The official `lemonade-api` package provides a type-safe client with Pydantic models for all 18 API endpoints, including chat, embeddings, reranking, audio, image generation, and model management.
+The official Lemonade Python SDK provides a type-safe client with Pydantic models for all 18 API endpoints, including chat, embeddings, reranking, audio, image generation, and model management.
 
 ```bash
 pip install lemonade-api

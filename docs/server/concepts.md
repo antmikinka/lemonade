@@ -97,7 +97,7 @@ The Python above will work with Lemonade Server, along with a variety of other c
 
 ## Lemonade Python SDK
 
-In addition to the OpenAI SDK, Lemonade provides its own official Python client library called `lemonade-api`. While the OpenAI SDK covers the standard chat and completion endpoints, the Lemonade SDK provides type-safe access to **all** Lemonade Server endpoints, including Lemonade-specific features that the OpenAI SDK does not cover:
+In addition to the OpenAI SDK, Lemonade provides its own official Python SDK. While the OpenAI SDK covers the standard chat and completion endpoints, the Lemonade SDK provides type-safe access to **all** Lemonade Server endpoints, including Lemonade-specific features that the OpenAI SDK does not cover:
 
 | Feature | OpenAI SDK | Lemonade SDK |
 |---------|:----------:|:------------:|

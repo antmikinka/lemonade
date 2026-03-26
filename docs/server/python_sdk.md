@@ -1,4 +1,4 @@
-# Python SDK (`lemonade-api`)
+# Python SDK
 
 The official Python client for Lemonade Server. It provides a type-safe, modular interface to all Lemonade Server endpoints using Pydantic models for requests and responses.
 
@@ -7,17 +7,34 @@ The official Python client for Lemonade Server. It provides a type-safe, modular
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Client Reference](#client-reference)
-  - [Chat & Completions](#chat-completions) | [Embeddings & Reranking](#embeddings-reranking) | [Audio](#audio) | [Images](#images) | [Models](#models) | [Model Management](#model-management) | [System](#system)
+    - [Initialization](#initialization)
+    - Chat & Completions
+        - [`chat_completions`](#chat_completions) | [`completions`](#completions) | [`responses`](#responses)
+    - Embeddings & Reranking
+        - [`embeddings`](#embeddings) | [`reranking`](#reranking)
+    - Audio
+        - [`audio_transcriptions`](#audio_transcriptions) | [`audio_speech`](#audio_speech)
+    - Images
+        - [`generate_images`](#generate_images)
+    - Models
+        - [`list_models`](#list_models) | [`get_model`](#get_model)
+    - Model Management
+        - [`pull_model`](#pull_model) | [`load_model`](#load_model) | [`unload_model`](#unload_model) | [`delete_model`](#delete_model)
+    - System
+        - [`health`](#health) | [`stats`](#stats) | [`system_info`](#system_info) | [`live`](#live)
 - [Data Models Reference](#data-models-reference)
+    - [Request Models](#request-models) | [Response Models](#response-models) | [Supporting Models](#supporting-models)
 - [Exception Handling](#exception-handling)
 - [Guides](#guides)
-  - [Streaming](#streaming) | [RAG Pipeline](#rag-pipeline) | [Audio Processing](#audio-processing) | [Model Lifecycle](#model-lifecycle)
+    - [Streaming](#streaming) | [RAG Pipeline](#rag-pipeline) | [Audio Processing](#audio-processing) | [Model Lifecycle](#model-lifecycle)
 
 ## Installation
 
 ```bash
 pip install lemonade-api
 ```
+
+> **Note:** The package name on PyPI is `lemonade-api`. The Python import name follows the standard convention: `import lemonade_api`. If the package name changes in a future release, check the [Lemonade GitHub repository](https://github.com/lemonade-sdk/lemonade) for the latest installation instructions.
 
 **Requirements:** Python 3.8+, `pydantic>=2.0.0`, `requests`
 
@@ -98,7 +115,8 @@ client = LemonadeClient(base_url="http://localhost:8000")
 
 ---
 
-### Chat & Completions
+<details markdown="1">
+<summary><h3 style="display:inline">Chat & Completions</h3> — <code>chat_completions</code>, <code>completions</code>, <code>responses</code></summary>
 
 #### `chat_completions`
 
@@ -126,6 +144,27 @@ def chat_completions(
 | `repeat_penalty` | `float` | No | `None` | Repetition penalty (1.0 - 2.0). |
 | `tools` | `List[Dict]` | No | `None` | Function calling tool definitions. |
 | `logprobs` | `bool` | No | `None` | Return log probabilities. |
+
+**Request body schema:**
+
+```json
+{
+  "model": "Qwen3-0.6B-GGUF",
+  "messages": [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": "Hello"}
+  ],
+  "stream": false,
+  "temperature": 0.7,
+  "top_p": null,
+  "top_k": null,
+  "max_completion_tokens": 100,
+  "stop": null,
+  "repeat_penalty": null,
+  "tools": null,
+  "logprobs": null
+}
+```
 
 **Example:**
 
@@ -178,6 +217,23 @@ def completions(
 | `max_tokens` | `int` | No | `None` | Maximum tokens to generate. |
 | `stop` | `str \| List[str]` | No | `None` | Stop sequences. |
 
+**Request body schema:**
+
+```json
+{
+  "model": "Qwen3-0.6B-GGUF",
+  "prompt": "Once upon a time",
+  "stream": false,
+  "echo": false,
+  "temperature": null,
+  "top_p": null,
+  "top_k": null,
+  "max_tokens": 50,
+  "stop": null,
+  "repeat_penalty": null
+}
+```
+
 **Example:**
 
 ```python
@@ -218,6 +274,21 @@ def responses(
 | `top_k` | `int` | No | `None` | Top-K sampling. |
 | `repeat_penalty` | `float` | No | `None` | Repetition penalty. |
 
+**Request body schema:**
+
+```json
+{
+  "input": "Explain quantum computing in simple terms",
+  "model": "Qwen3-0.6B-GGUF",
+  "stream": false,
+  "temperature": 0.8,
+  "max_output_tokens": 200,
+  "top_p": null,
+  "top_k": null,
+  "repeat_penalty": null
+}
+```
+
 **Example:**
 
 ```python
@@ -234,9 +305,12 @@ response = client.responses(request)
 print(response)
 ```
 
+</details>
+
 ---
 
-### Embeddings & Reranking
+<details markdown="1">
+<summary><h3 style="display:inline">Embeddings & Reranking</h3> — <code>embeddings</code>, <code>reranking</code></summary>
 
 #### `embeddings`
 
@@ -255,6 +329,16 @@ def embeddings(
 | **`model`** | `str` | **Yes** | - | Embedding model ID (e.g., `"nomic-embed-text-v1-GGUF"`). |
 | **`input`** | `str \| List[str]` | **Yes** | - | Text to embed. |
 | `encoding_format` | `str` | No | `"float"` | Format: `"float"` or `"base64"`. |
+
+**Request body schema:**
+
+```json
+{
+  "model": "nomic-embed-text-v1-GGUF",
+  "input": ["Hello, world!", "How are you?"],
+  "encoding_format": "float"
+}
+```
 
 > **Note:** Only available for models using the `llamacpp` or `flm` recipes. ONNX models (OGA recipes) do not support embeddings.
 
@@ -294,6 +378,20 @@ def reranking(
 | **`query`** | `str` | **Yes** | The search query. |
 | **`documents`** | `List[str]` | **Yes** | Documents to rerank. |
 
+**Request body schema:**
+
+```json
+{
+  "model": "bge-reranker-v2-m3-GGUF",
+  "query": "What is machine learning?",
+  "documents": [
+    "Machine learning is a subset of AI.",
+    "Python is a programming language.",
+    "Neural networks are used in deep learning."
+  ]
+}
+```
+
 > **Note:** Only available for models using the `llamacpp` recipe.
 
 **Example:**
@@ -320,9 +418,12 @@ for result in sorted(response.results, key=lambda x: x.relevance_score, reverse=
 
 > **Note:** Results are returned in their original input order. Sort by `relevance_score` descending on the client side to get ranked order.
 
+</details>
+
 ---
 
-### Audio
+<details markdown="1">
+<summary><h3 style="display:inline">Audio</h3> — <code>audio_transcriptions</code>, <code>audio_speech</code></summary>
 
 #### `audio_transcriptions`
 
@@ -342,6 +443,15 @@ def audio_transcriptions(
 | **`file`** | `str` | **Yes** | - | Path to the audio file (`.wav`). |
 | `language` | `str` | No | `None` | ISO 639-1 language code (e.g., `"en"`, `"es"`, `"fr"`). Auto-detected if not set. |
 | `response_format` | `str` | No | `"json"` | Response format: `"json"`, `"text"`, `"srt"`, `"vtt"`. |
+
+**Request body schema (multipart/form-data):**
+
+```
+model=Whisper-Small
+file=@path/to/audio.wav
+language=en
+response_format=json
+```
 
 **Example:**
 
@@ -383,6 +493,19 @@ def audio_speech(
 | `response_format` | `str` | No | `"mp3"` | Audio format: `"mp3"`, `"wav"`, `"opus"`, `"pcm"`. |
 | `stream_format` | `str` | No | `None` | Set to `"audio"` for streaming PCM output. |
 
+**Request body schema:**
+
+```json
+{
+  "model": "kokoro-v1",
+  "input": "Lemonade Server can speak!",
+  "voice": "af_sky",
+  "speed": 1.0,
+  "response_format": "mp3",
+  "stream_format": null
+}
+```
+
 **Example:**
 
 ```python
@@ -403,9 +526,12 @@ with open("output.mp3", "wb") as f:
     f.write(audio_data)
 ```
 
+</details>
+
 ---
 
-### Images
+<details markdown="1">
+<summary><h3 style="display:inline">Images</h3> — <code>generate_images</code></summary>
 
 #### `generate_images`
 
@@ -430,6 +556,21 @@ def generate_images(
 | `cfg_scale` | `float` | No | `None` | Classifier-free guidance scale. |
 | `seed` | `int` | No | `None` | Random seed for reproducibility. |
 
+**Request body schema:**
+
+```json
+{
+  "model": "SD-Turbo",
+  "prompt": "A serene mountain landscape at sunset",
+  "size": "512x512",
+  "n": 1,
+  "response_format": "b64_json",
+  "steps": 4,
+  "cfg_scale": 1.0,
+  "seed": null
+}
+```
+
 **Example:**
 
 ```python
@@ -447,9 +588,12 @@ response = client.generate_images(request)
 # Response contains base64-encoded image data in response["data"][0]["b64_json"]
 ```
 
+</details>
+
 ---
 
-### Models
+<details markdown="1">
+<summary><h3 style="display:inline">Models</h3> — <code>list_models</code>, <code>get_model</code></summary>
 
 #### `list_models`
 
@@ -503,9 +647,13 @@ print(f"Size: {model.size} GB")
 print(f"Labels: {model.labels}")
 ```
 
+
+</details>
+
 ---
 
-### Model Management
+<details markdown="1">
+<summary><h3 style="display:inline">Model Management</h3> — <code>pull_model</code>, <code>load_model</code>, <code>unload_model</code>, <code>delete_model</code></summary>
 
 #### `pull_model`
 
@@ -530,6 +678,22 @@ def pull_model(
 | `embedding` | `bool` | No | `False` | Mark as an embedding model (adds `embeddings` label). |
 | `reranking` | `bool` | No | `False` | Mark as a reranking model (adds `reranking` label). |
 | `mmproj` | `str` | No | `None` | Multimodal projector file for vision models. |
+
+**Request body schema:**
+
+```json
+{
+  "model_name": "Qwen3-0.6B-GGUF",
+  "checkpoint": null,
+  "recipe": null,
+  "stream": false,
+  "reasoning": false,
+  "vision": false,
+  "embedding": false,
+  "reranking": false,
+  "mmproj": null
+}
+```
 
 **Example:**
 
@@ -574,6 +738,18 @@ def load_model(
 | `llamacpp_args` | `str` | No | `None` | Custom arguments for llama-server. |
 | `save_options` | `bool` | No | `False` | Save these settings as defaults for this model. |
 
+**Request body schema:**
+
+```json
+{
+  "model_name": "Qwen3-0.6B-GGUF",
+  "ctx_size": 8192,
+  "llamacpp_backend": "vulkan",
+  "llamacpp_args": null,
+  "save_options": true
+}
+```
+
 **Example:**
 
 ```python
@@ -610,6 +786,14 @@ def unload_model(
 |:---|:---|:---|:---|:---|
 | `model_name` | `str` | No | `None` | Model to unload. If `None`, unloads all loaded models. |
 
+**Request body schema:**
+
+```json
+{
+  "model_name": "Qwen3-0.6B-GGUF"
+}
+```
+
 **Example:**
 
 ```python
@@ -640,6 +824,14 @@ def delete_model(
 |:---|:---|:---|:---|
 | **`model_name`** | `str` | **Yes** | Model to delete. |
 
+**Request body schema:**
+
+```json
+{
+  "model_name": "old-model"
+}
+```
+
 **Example:**
 
 ```python
@@ -649,9 +841,13 @@ response = client.delete_model(DeleteModelRequest(model_name="old-model"))
 print(response)  # {"status": "success", "message": "Deleted model: old-model"}
 ```
 
+
+</details>
+
 ---
 
-### System
+<details markdown="1">
+<summary><h3 style="display:inline">System</h3> — <code>health</code>, <code>stats</code>, <code>system_info</code>, <code>live</code></summary>
 
 #### `health`
 
@@ -772,6 +968,9 @@ if client.live():
 else:
     print("Server is unreachable")
 ```
+
+
+</details>
 
 ---
 
