@@ -180,3 +180,9 @@ CLAUDE.local.md
 # WiX Toolset build artifacts
 *.msi
 *.wixpdb
+
+# Chroma DB data (development artifact)
+chroma_data/
+
+# External submodules (KittenTTS external repo)
+external/

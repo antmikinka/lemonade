@@ -1,0 +1,49 @@
+{
+  "name": "prioritization-app",
+  "version": "1.0.0",
+  "description": "Prioritization Frameworks Web Application with AI Agent Pipeline",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend",
+    "e2e"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=backend & npm run dev --workspace=frontend",
+    "build": "npm run build --workspace=frontend && npm run build --workspace=backend",
+    "start": "npm run start --workspace=backend",
+    "lint": "npm run lint --workspace=frontend && npm run lint --workspace=backend",
+    "test": "npm run test:run --workspace=frontend && npm run test:run --workspace=backend",
+    "test:frontend": "npm run test --workspace=frontend",
+    "test:backend": "npm run test --workspace=backend",
+    "test:run": "npm run test:run --workspace=frontend && npm run test:run --workspace=backend",
+    "test:coverage": "npm run test:coverage --workspace=frontend && npm run test:coverage --workspace=backend",
+    "test:ui": "npm run test:ui --workspace=frontend",
+    "test:e2e": "npm run test --workspace=e2e",
+    "test:e2e:chromium": "npm run test:chromium --workspace=e2e",
+    "test:e2e:debug": "npm run test:debug --workspace=e2e",
+    "test:e2e:ui": "npm run test:ui --workspace=e2e",
+    "test:all": "npm run test && npm run test:e2e:chromium",
+    "e2e:install": "npx playwright install --with-deps",
+    "e2e:report": "npx playwright show-report"
+  },
+  "keywords": [
+    "prioritization",
+    "frameworks",
+    "ai-agents",
+    "RICE",
+    "MoSCoW",
+    "WSJF",
+    "Eisenhower",
+    "Kano",
+    "ICE"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "devDependencies": {},
+  "dependencies": {}
+}
