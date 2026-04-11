@@ -667,6 +667,109 @@ if(WIN32)
     list(APPEND SOURCES src/cpp/server/version.rc)
 endif()
 
+# ============================================================
+# Kitten-TTS Native Dependencies
+# ============================================================
+
+# Option to enable native KittenTTS implementation
+option(ENABLE_KITTEN_TTS_NATIVE "Enable native C++ KittenTTS implementation" ON)
+
+if(ENABLE_KITTEN_TTS_NATIVE)
+    message(STATUS "=== KittenTTS Native Configuration ===")
+
+    # --- ONNX Runtime ---
+    set(MIN_ONNXRUNTIME_VERSION "1.18.0")
+    if(NOT TARGET onnxruntime::onnxruntime)
+        message(STATUS "Fetching ONNX Runtime v${MIN_ONNXRUNTIME_VERSION}...")
+        include(FetchContent)
+        FetchContent_Declare(onnxruntime
+            GIT_REPOSITORY https://github.com/microsoft/onnxruntime.git
+            GIT_TAG v${MIN_ONNXRUNTIME_VERSION}
+            EXCLUDE_FROM_ALL
+        )
+        set(onnxruntime_BUILD_SHARED_LIBS OFF CACHE INTERNAL "")
+        set(onnxruntime_ENABLE_CPUINFO ON CACHE INTERNAL "")
+        set(onnxruntime_USE_EIGEN_FOR_GEMM ON CACHE INTERNAL "")
+        set(onnxruntime_ENABLE_LTO OFF CACHE INTERNAL "")
+        set(onnxruntime_ENABLE_LANGUAGE_BINDINGS OFF CACHE INTERNAL "")
+        set(onnxruntime_BUILD_UNIT_TESTS OFF CACHE INTERNAL "")
+        set(onnxruntime_BUILD_CSHARP OFF CACHE INTERNAL "")
+        set(onnxruntime_BUILD_JAVA OFF CACHE INTERNAL "")
+        set(onnxruntime_BUILD_OBJC OFF CACHE INTERNAL "")
+        set(onnxruntime_BUILD_NODEJS OFF CACHE INTERNAL "")
+        set(onnxruntime_BUILD_PYTHON OFF CACHE INTERNAL "")
+        FetchContent_MakeAvailable(onnxruntime)
+    endif()
+
+    # --- espeak-ng ---
+    find_package(PkgConfig QUIET)
+    pkg_check_modules(ESPEAK_NG libespeak-ng>=1.50)
+
+    if(ESPEAK_NG_FOUND)
+        message(STATUS "Using system espeak-ng: ${ESPEAK_NG_VERSION}")
+        target_link_libraries(${EXECUTABLE_NAME} PRIVATE ${ESPEAK_NG_LIBRARIES})
+        target_include_directories(${EXECUTABLE_NAME} PRIVATE ${ESPEAK_NG_INCLUDE_DIRS})
+    else()
+        message(STATUS "System espeak-ng not found, will attempt to use at runtime")
+        # espeak-ng must be installed on the system at runtime
+    endif()
+
+    # --- libzip for NPZ reading ---
+    find_package(PkgConfig QUIET)
+    pkg_check_modules(LIBZIP libzip)
+
+    if(LIBZIP_FOUND)
+        message(STATUS "Using system libzip: ${LIBZIP_VERSION}")
+        target_link_libraries(${EXECUTABLE_NAME} PRIVATE ${LIBZIP_LIBRARIES})
+        target_include_directories(${EXECUTABLE_NAME} PRIVATE ${LIBZIP_INCLUDE_DIRS})
+    else()
+        message(STATUS "System libzip not found, fetching...")
+        FetchContent_Declare(libzip
+            GIT_REPOSITORY https://github.com/nih-at/libzip.git
+            GIT_TAG v1.10.1
+            EXCLUDE_FROM_ALL
+        )
+        set(BUILD_SHARED_LIBS OFF CACHE INTERNAL "")
+        set(BUILD_TOOLS OFF CACHE INTERNAL "")
+        set(BUILD_REGRESS OFF CACHE INTERNAL "")
+        set(BUILD_EXAMPLES OFF CACHE INTERNAL "")
+        FetchContent_MakeAvailable(libzip)
+        target_link_libraries(${EXECUTABLE_NAME} PRIVATE zip)
+    endif()
+
+    # Add KittenTTS native sources
+    list(APPEND SOURCES
+        src/cpp/server/backends/kitten_tts_native.cpp
+        src/cpp/server/backends/kitten_tts_preprocessor.cpp
+        src/cpp/server/backends/kitten_tts_phonemizer.cpp
+        src/cpp/server/backends/kitten_tts_voice.cpp
+        src/cpp/server/backends/kitten_tts_onnx_model.cpp
+        src/cpp/server/backends/audio_encoder.cpp
+        src/cpp/server/utils/npz_reader.cpp
+    )
+
+    # Enable native TTS feature
+    target_compile_definitions(${EXECUTABLE_NAME} PRIVATE LEMON_KITTEN_TTS_NATIVE)
+    target_link_libraries(${EXECUTABLE_NAME} PRIVATE onnxruntime::onnxruntime)
+
+    # Platform-specific espeak-ng data path
+    if(WIN32)
+        target_compile_definitions(${EXECUTABLE_NAME} PRIVATE
+            ESPEAK_DATA_PATH="$<TARGET_FILE_DIR:${EXECUTABLE_NAME}>/espeak-ng-data"
+        )
+    elseif(APPLE)
+        target_compile_definitions(${EXECUTABLE_NAME} PRIVATE
+            ESPEAK_DATA_PATH="@executable_path/../Resources/espeak-ng-data"
+        )
+    else()
+        target_compile_definitions(${EXECUTABLE_NAME} PRIVATE
+            ESPEAK_DATA_PATH="/usr/share/espeak-ng-data"
+        )
+    endif()
+
+    message(STATUS "KittenTTS native implementation enabled")
+endif()
+
 # Create executable
 add_executable(${EXECUTABLE_NAME} ${SOURCES})
 
