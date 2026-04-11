@@ -20,7 +20,7 @@ using json = nlohmann::json;
 namespace fs = std::filesystem;
 
 // Global engine instance
-std::unique_ptr<lemon::backends::KittenTtsEngine> g_engine;
+std::unique_ptr<lemon::backends::KittenTtsNative> g_engine;
 int g_port = 8780;
 std::string g_host = "127.0.0.1";
 
@@ -70,7 +70,7 @@ std::vector<uint8_t> encode_wav(const std::vector<float>& audio, int sample_rate
 
 // Health check endpoint
 void handle_health(const httplib::Request& req, httplib::Response& res) {
-    if (g_engine && g_engine->is_initialized()) {
+    if (g_engine && g_engine->is_loaded()) {
         res.set_content(R"({"status":"healthy"})", "application/json");
     } else {
         res.status = 503;
@@ -80,7 +80,7 @@ void handle_health(const httplib::Request& req, httplib::Response& res) {
 
 // Get available voices
 void handle_voices(const httplib::Request& req, httplib::Response& res) {
-    if (!g_engine || !g_engine->is_initialized()) {
+    if (!g_engine || !g_engine->is_loaded()) {
         res.status = 503;
         res.set_content(R"({"error":"Engine not initialized"})", "application/json");
         return;
@@ -98,7 +98,7 @@ void handle_voices(const httplib::Request& req, httplib::Response& res) {
 
 // Speech synthesis endpoint
 void handle_speech(const httplib::Request& req, httplib::Response& res) {
-    if (!g_engine || !g_engine->is_initialized()) {
+    if (!g_engine || !g_engine->is_loaded()) {
         res.status = 503;
         res.set_content(R"({"error":"Engine not initialized"})", "application/json");
         return;
@@ -152,7 +152,7 @@ void handle_speech(const httplib::Request& req, httplib::Response& res) {
 
 // Ollama-compatible voices endpoint
 void handle_ollama_voices(const httplib::Request& req, httplib::Response& res) {
-    if (!g_engine || !g_engine->is_initialized()) {
+    if (!g_engine || !g_engine->is_loaded()) {
         res.status = 503;
         res.set_content(R"({"error":"Engine not initialized"})", "application/json");
         return;
@@ -211,7 +211,7 @@ int main(int argc, char* argv[]) {
 
     // Initialize engine
     std::cout << "Initializing KittenTTS engine..." << std::endl;
-    g_engine = std::make_unique<lemon::backends::KittenTtsEngine>();
+    g_engine = std::make_unique<lemon::backends::KittenTtsNative>();
 
     if (!g_engine->initialize(model_dir)) {
         std::cerr << "Failed to initialize KittenTTS engine" << std::endl;
