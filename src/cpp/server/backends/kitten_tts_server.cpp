@@ -23,10 +23,10 @@ namespace backends {
 
 InstallParams KittenTtsServer::get_install_params(const std::string& /*backend*/, const std::string& version) {
     InstallParams params;
-    params.repo = "lemonade-sdk/kitten-tts";
+    params.repo = "KittenML/KittenTTS";
 
 #ifdef _WIN32
-    params.filename = "kitten-tts-server-windows-x86_64.tar.gz";
+    params.filename = "kitten-tts-server-windows-x86_64.zip";
 #elif defined(__linux__)
     params.filename = "kitten-tts-server-linux-x86_64.tar.gz";
 #else
@@ -68,8 +68,8 @@ void KittenTtsServer::load(const std::string& model_name, const ModelInfo& model
 
     LOG(INFO, "KittenTtsServer") << "Starting server on port " << port_ << std::endl;
 
-    // Build command line arguments
-    // kitten-tts-server takes model directory as first argument, then --host and --port
+    // Build command line arguments for kitten-tts-server
+    // Args: <model_dir> --host <ip> --port <port>
     std::vector<std::string> args = {
         model_path.string(),
         "--host", "127.0.0.1",

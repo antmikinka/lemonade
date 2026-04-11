@@ -1,8 +1,11 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2024 Lemonade Project
+
 #pragma once
 
-#include "../wrapped_server.h"
-#include "../server_capabilities.h"
-#include "backend_utils.h"
+#include "lemon/wrapped_server.h"
+#include "lemon/server_capabilities.h"
+#include "lemon/backends/backend_utils.h"
 #include <string>
 #include <filesystem>
 

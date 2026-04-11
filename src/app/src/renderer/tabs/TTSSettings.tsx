@@ -9,6 +9,7 @@ interface  TTSSettingsProps {
 
 export const voiceOptions: string[] = [
   '',
+  // OpenAI voices (default fallback)
   'ash',
   'ballad',
   'coral',

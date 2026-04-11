@@ -643,6 +643,13 @@ set(SOURCES
     src/cpp/server/backend_manager.cpp
     src/cpp/server/ollama_api.cpp
     src/cpp/server/anthropic_api.cpp
+    # KittenTTS native components
+    src/cpp/server/utils/npz_reader.cpp
+    src/cpp/server/backends/kitten_tts_phonemizer.cpp
+    src/cpp/server/backends/kitten_tts_voice.cpp
+    src/cpp/server/backends/kitten_tts_onnx_model.cpp
+    src/cpp/server/backends/kitten_tts_preprocessor.cpp
+    src/cpp/server/backends/kitten_tts_native.cpp
     $<$<OR:$<PLATFORM_ID:Windows>,$<PLATFORM_ID:Linux>>:src/cpp/server/streaming_audio_buffer.cpp>
     $<$<OR:$<PLATFORM_ID:Windows>,$<PLATFORM_ID:Linux>>:src/cpp/server/vad.cpp>
     $<$<OR:$<PLATFORM_ID:Windows>,$<PLATFORM_ID:Linux>>:src/cpp/server/realtime_session.cpp>
@@ -684,6 +691,60 @@ if(WIN32)
     endif()
 endif()
 
+
+# ============================================================
+# KittenTTS Dependencies: ONNX Runtime and espeak-ng
+# ============================================================
+
+# ONNX Runtime (for KittenTTS native inference)
+set(MIN_ONNXRUNTIME_VERSION "1.18.0")
+find_package(onnxruntime QUIET)
+if(NOT onnxruntime_FOUND)
+    message(STATUS "ONNX Runtime not found, will use FetchContent")
+    include(FetchContent)
+    FetchContent_Declare(onnxruntime
+        GIT_REPOSITORY https://github.com/microsoft/onnxruntime.git
+        GIT_TAG v${MIN_ONNXRUNTIME_VERSION}
+        EXCLUDE_FROM_ALL
+    )
+    set(onnxruntime_BUILD_SHARED_LIB OFF CACHE INTERNAL "")
+    set(onnxruntime_BUILD_TESTS OFF CACHE INTERNAL "")
+    set(onnxruntime_BUILD_SAMPLES OFF CACHE INTERNAL "")
+    FetchContent_MakeAvailable(onnxruntime)
+endif()
+
+# espeak-ng (for phonemization)
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(ESPEAK_NG QUIET espeak-ng)
+endif()
+if(NOT ESPEAK_NG_FOUND)
+    find_path(ESPEAK_NG_INCLUDE_DIRS NAMES espeak-ng.h)
+    find_library(ESPEAK_NG_LIBRARIES NAMES espeak-ng libespeak-ng)
+    if(ESPEAK_NG_INCLUDE_DIRS AND ESPEAK_NG_LIBRARIES)
+        set(ESPEAK_NG_FOUND TRUE)
+    endif()
+endif()
+if(NOT ESPEAK_NG_FOUND)
+    message(STATUS "espeak-ng not found, will use FetchContent")
+    include(FetchContent)
+    FetchContent_Declare(espeak-ng
+        GIT_REPOSITORY https://github.com/espeak-ng/espeak-ng.git
+        GIT_TAG 1.50
+        EXCLUDE_FROM_ALL
+    )
+    set(ESPEAK_NG_INSTALL OFF CACHE INTERNAL "")
+    FetchContent_MakeAvailable(espeak-ng)
+    set(ESPEAK_NG_INCLUDE_DIRS ${espeak-ng_SOURCE_DIR}/src/include)
+    set(ESPEAK_NG_LIBRARIES espeak-ng)
+endif()
+
+# Link ONNX Runtime and espeak-ng to main executable
+target_link_libraries(${EXECUTABLE_NAME} PRIVATE onnxruntime)
+if(ESPEAK_NG_FOUND)
+    target_include_directories(${EXECUTABLE_NAME} PRIVATE ${ESPEAK_NG_INCLUDE_DIRS})
+    target_link_libraries(${EXECUTABLE_NAME} PRIVATE ${ESPEAK_NG_LIBRARIES})
+endif()
 
 # ============================================================
 # Linking
