@@ -5,19 +5,19 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useTeamDashboard } from '../../../contexts/TeamDashboardContext';
-import { Issue, IssueStatus, IssuePriority, TeamMember, PRIORITY_LABELS } from '../../../types/teamDashboard';
-import { PRIORITY_COLORS } from '../../../types/teamDashboard';
+import type { WorkItem, WorkItemStatus, Priority, Contributor, Label } from '../../../types/workItem';
+import { PRIORITY_COLORS, PRIORITY_LABELS } from '../../../types/workItem';
 import { CloseIcon } from '../../../components/Icons';
 
 interface IssueDetailPanelProps {
-  issue: Issue;
+  issue: WorkItem;
   onClose: () => void;
 }
 
 const IssueDetailPanel: React.FC<IssueDetailPanelProps> = ({ issue, onClose }) => {
-  const { updateIssue, deleteIssue, state, selectIssue } = useTeamDashboard();
+  const { updateWorkItem, deleteWorkItem, state, selectWorkItem } = useTeamDashboard();
   const [isEditing, setIsEditing] = useState(false);
-  const [editedIssue, setEditedIssue] = useState<Issue>(issue);
+  const [editedIssue, setEditedIssue] = useState<WorkItem>(issue);
   const [newLabel, setNewLabel] = useState('');
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -56,7 +56,7 @@ const IssueDetailPanel: React.FC<IssueDetailPanelProps> = ({ issue, onClose }) =
   }, [onClose]);
 
   const handleSave = () => {
-    updateIssue(editedIssue);
+    updateWorkItem(editedIssue);
     setIsEditing(false);
   };
 
@@ -67,16 +67,16 @@ const IssueDetailPanel: React.FC<IssueDetailPanelProps> = ({ issue, onClose }) =
 
   const handleDelete = () => {
     if (window.confirm(`Are you sure you want to delete issue "${issue.title}"?`)) {
-      deleteIssue(issue.id);
+      deleteWorkItem(issue.id);
       onClose();
     }
   };
 
-  const handleStatusChange = (newStatus: IssueStatus) => {
+  const handleStatusChange = (newStatus: WorkItemStatus) => {
     setEditedIssue({ ...editedIssue, status: newStatus, updatedAt: new Date().toISOString() });
   };
 
-  const handlePriorityChange = (newPriority: IssuePriority) => {
+  const handlePriorityChange = (newPriority: Priority) => {
     setEditedIssue({ ...editedIssue, priority: newPriority, updatedAt: new Date().toISOString() });
   };
 
@@ -84,26 +84,35 @@ const IssueDetailPanel: React.FC<IssueDetailPanelProps> = ({ issue, onClose }) =
     const member = state.teamMembers.find((m) => m.id === memberId);
     setEditedIssue({
       ...editedIssue,
-      assignee: member || undefined,
+      assignees: member ? [member] : [],
       updatedAt: new Date().toISOString(),
     });
   };
 
   const handleAddLabel = () => {
-    if (newLabel.trim() && !editedIssue.labels.includes(newLabel.trim())) {
-      setEditedIssue({
-        ...editedIssue,
-        labels: [...editedIssue.labels, newLabel.trim()],
-        updatedAt: new Date().toISOString(),
-      });
-      setNewLabel('');
+    if (newLabel.trim()) {
+      const existingLabel = editedIssue.labels.find(l => l.name === newLabel.trim());
+      if (!existingLabel) {
+        const newLabelObj: Label = {
+          id: `label_${Date.now()}`,
+          name: newLabel.trim(),
+          color: '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0'),
+          source: 'manual',
+        };
+        setEditedIssue({
+          ...editedIssue,
+          labels: [...editedIssue.labels, newLabelObj],
+          updatedAt: new Date().toISOString(),
+        });
+        setNewLabel('');
+      }
     }
   };
 
-  const handleRemoveLabel = (labelToRemove: string) => {
+  const handleRemoveLabel = (labelToRemove: Label) => {
     setEditedIssue({
       ...editedIssue,
-      labels: editedIssue.labels.filter((l) => l !== labelToRemove),
+      labels: editedIssue.labels.filter((l) => l.id !== labelToRemove.id),
       updatedAt: new Date().toISOString(),
     });
   };
@@ -172,13 +181,15 @@ const IssueDetailPanel: React.FC<IssueDetailPanelProps> = ({ issue, onClose }) =
                 <select
                   id="edit-status"
                   value={editedIssue.status}
-                  onChange={(e) => handleStatusChange(e.target.value as IssueStatus)}
+                  onChange={(e) => handleStatusChange(e.target.value as WorkItemStatus)}
                   className="issue-detail-select"
                 >
                   <option value="backlog">Backlog</option>
                   <option value="in_progress">In Progress</option>
-                  <option value="review">Review</option>
+                  <option value="in_review">In Review</option>
+                  <option value="merged">Merged</option>
                   <option value="done">Done</option>
+                  <option value="closed">Closed</option>
                 </select>
               </div>
 
@@ -187,7 +198,7 @@ const IssueDetailPanel: React.FC<IssueDetailPanelProps> = ({ issue, onClose }) =
                 <select
                   id="edit-priority"
                   value={editedIssue.priority}
-                  onChange={(e) => handlePriorityChange(e.target.value as IssuePriority)}
+                  onChange={(e) => handlePriorityChange(e.target.value as Priority)}
                   className="issue-detail-select"
                 >
                   <option value="low">Low</option>
@@ -201,7 +212,7 @@ const IssueDetailPanel: React.FC<IssueDetailPanelProps> = ({ issue, onClose }) =
                 <label htmlFor="edit-assignee">Assignee</label>
                 <select
                   id="edit-assignee"
-                  value={editedIssue.assignee?.id || ''}
+                  value={editedIssue.assignees?.[0]?.id || ''}
                   onChange={(e) => handleAssigneeChange(e.target.value)}
                   className="issue-detail-select"
                 >
@@ -219,12 +230,12 @@ const IssueDetailPanel: React.FC<IssueDetailPanelProps> = ({ issue, onClose }) =
                 <div className="issue-detail-labels-edit">
                   <div className="issue-detail-labels-list">
                     {editedIssue.labels.map((label) => (
-                      <span key={label} className="issue-detail-label">
-                        {label}
+                      <span key={label.id} className="issue-detail-label">
+                        {label.name}
                         <button
                           className="issue-detail-label-remove"
                           onClick={() => handleRemoveLabel(label)}
-                          aria-label={`Remove label ${label}`}
+                          aria-label={`Remove label ${label.name}`}
                         >
                           ×
                         </button>
@@ -258,27 +269,14 @@ const IssueDetailPanel: React.FC<IssueDetailPanelProps> = ({ issue, onClose }) =
                   type="number"
                   min="0"
                   max="13"
-                  value={editedIssue.storyPoints || ''}
+                  value={editedIssue.metrics?.estimatedPoints || ''}
                   onChange={(e) =>
                     setEditedIssue({
                       ...editedIssue,
-                      storyPoints: e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    })
-                  }
-                  className="issue-detail-input"
-                />
-              </div>
-
-              <div className="issue-detail-field">
-                <label htmlFor="edit-due-date">Due Date</label>
-                <input
-                  id="edit-due-date"
-                  type="date"
-                  value={editedIssue.dueDate ? editedIssue.dueDate.split('T')[0] : ''}
-                  onChange={(e) =>
-                    setEditedIssue({
-                      ...editedIssue,
-                      dueDate: e.target.value ? new Date(e.target.value).toISOString() : undefined,
+                      metrics: {
+                        ...editedIssue.metrics,
+                        estimatedPoints: e.target.value ? parseInt(e.target.value, 10) : undefined,
+                      },
                     })
                   }
                   className="issue-detail-input"
@@ -314,8 +312,8 @@ const IssueDetailPanel: React.FC<IssueDetailPanelProps> = ({ issue, onClose }) =
                   <h5>Labels</h5>
                   <div className="issue-detail-labels">
                     {issue.labels.map((label) => (
-                      <span key={label} className="issue-detail-label">
-                        {label}
+                      <span key={label.id} className="issue-detail-label" style={{ backgroundColor: label.color + '20', color: label.color }}>
+                        {label.name}
                       </span>
                     ))}
                   </div>
@@ -328,19 +326,13 @@ const IssueDetailPanel: React.FC<IssueDetailPanelProps> = ({ issue, onClose }) =
                   <div className="issue-detail-grid-item">
                     <span className="issue-detail-grid-label">Assignee:</span>
                     <span className="issue-detail-grid-value">
-                      {issue.assignee?.name || 'Unassigned'}
+                      {issue.assignees?.[0]?.name || 'Unassigned'}
                     </span>
                   </div>
-                  {issue.storyPoints && (
+                  {issue.metrics?.estimatedPoints && (
                     <div className="issue-detail-grid-item">
                       <span className="issue-detail-grid-label">Story Points:</span>
-                      <span className="issue-detail-grid-value">{issue.storyPoints}</span>
-                    </div>
-                  )}
-                  {issue.dueDate && (
-                    <div className="issue-detail-grid-item">
-                      <span className="issue-detail-grid-label">Due Date:</span>
-                      <span className="issue-detail-grid-value">{formatDate(issue.dueDate)}</span>
+                      <span className="issue-detail-grid-value">{issue.metrics.estimatedPoints}</span>
                     </div>
                   )}
                   <div className="issue-detail-grid-item">
@@ -351,12 +343,6 @@ const IssueDetailPanel: React.FC<IssueDetailPanelProps> = ({ issue, onClose }) =
                     <span className="issue-detail-grid-label">Updated:</span>
                     <span className="issue-detail-grid-value">{formatDate(issue.updatedAt)}</span>
                   </div>
-                  {issue.resolvedAt && (
-                    <div className="issue-detail-grid-item">
-                      <span className="issue-detail-grid-label">Resolved:</span>
-                      <span className="issue-detail-grid-value">{formatDate(issue.resolvedAt)}</span>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
@@ -398,12 +384,14 @@ const IssueDetailPanel: React.FC<IssueDetailPanelProps> = ({ issue, onClose }) =
 /**
  * Format status for display
  */
-const formatStatus = (status: IssueStatus): string => {
-  const statusLabels: Record<IssueStatus, string> = {
+const formatStatus = (status: WorkItemStatus): string => {
+  const statusLabels: Record<WorkItemStatus, string> = {
     backlog: 'Backlog',
     in_progress: 'In Progress',
-    review: 'Review',
+    in_review: 'In Review',
+    merged: 'Merged',
     done: 'Done',
+    closed: 'Closed',
   };
   return statusLabels[status];
 };

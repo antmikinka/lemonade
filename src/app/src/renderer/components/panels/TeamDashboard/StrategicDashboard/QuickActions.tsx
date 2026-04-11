@@ -4,9 +4,9 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useTeamDashboard } from '../../../contexts/TeamDashboardContext';
-import type { WorkItem, StrategicInitiative, StrategicTag, ROICategory } from '../../../types/workItem';
-import type { StrategicCategory } from '../../../types/workItem';
+import { useTeamDashboard } from '../../../../contexts/TeamDashboardContext';
+import type { WorkItem, StrategicInitiative, StrategicTag, ROICategory } from '../../../../types/workItem';
+import type { StrategicCategory } from '../../../../types/workItem';
 
 /**
  * Focus trap hook for modal dialogs

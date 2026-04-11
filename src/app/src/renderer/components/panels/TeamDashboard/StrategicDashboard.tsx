@@ -11,13 +11,13 @@
  */
 
 import React, { useMemo, useCallback } from 'react';
-import { useTeamDashboard } from '../../contexts/TeamDashboardContext';
+import { useTeamDashboard } from '../../../contexts/TeamDashboardContext';
 import type {
   DashboardMetrics,
   AIInsight,
   StrategicInitiative,
   WorkItem,
-} from '../../types/workItem';
+} from '../../../types/workItem';
 
 // Import sub-components (stubs - to be implemented)
 import { PortfolioSummary } from './StrategicDashboard/PortfolioSummary';
@@ -33,8 +33,8 @@ import {
   AlertCircleIcon,
   LightbulbIcon,
   RefreshCwIcon,
-  SettingsIcon,
-} from '../../components/Icons';
+  Settings,
+} from '../../../components/Icons';
 
 interface StrategicDashboardProps {
   isVisible: boolean;
@@ -52,10 +52,10 @@ const StrategicDashboard: React.FC<StrategicDashboardProps> = ({ isVisible }) =>
   // Count insights by severity
   const insightCounts = useMemo(() => {
     return {
-      critical: insights.filter((i) => i.severity === 'critical').length,
-      high: insights.filter((i) => i.severity === 'high').length,
-      medium: insights.filter((i) => i.severity === 'medium').length,
-      low: insights.filter((i) => i.severity === 'low').length,
+      critical: insights.filter((i: AIInsight) => i.severity === 'critical').length,
+      high: insights.filter((i: AIInsight) => i.severity === 'high').length,
+      medium: insights.filter((i: AIInsight) => i.severity === 'medium').length,
+      low: insights.filter((i: AIInsight) => i.severity === 'low').length,
     };
   }, [insights]);
 
@@ -130,7 +130,7 @@ const StrategicDashboard: React.FC<StrategicDashboardProps> = ({ isVisible }) =>
             title="Configure GitHub sync settings"
             aria-label="Configure GitHub sync settings"
           >
-            <SettingsIcon size={18} />
+            <Settings size={18} />
             <span>Settings</span>
           </button>
         </div>
@@ -181,7 +181,7 @@ const StrategicDashboard: React.FC<StrategicDashboardProps> = ({ isVisible }) =>
             Connect your GitHub repository to start tracking strategic metrics.
           </p>
           <button className="strategic-dashboard-connect-btn">
-            <SettingsIcon size={18} />
+            <Settings size={18} />
             <span>Configure GitHub Integration</span>
           </button>
         </div>

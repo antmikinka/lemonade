@@ -62,8 +62,13 @@ const TeamTrackingPanel: React.FC<TeamTrackingPanelProps> = ({ isVisible }) => {
   };
 
   const handlePriorityFilter = (priority: Priority) => {
+    const currentPriorities = state.filters.priorities || [];
+    const newPriorities = currentPriorities.includes(priority)
+      ? currentPriorities.filter((p) => p !== priority)
+      : [...currentPriorities, priority];
+
     setFilters({
-      priorities: state.filters.priorities === priority ? undefined : [priority],
+      priorities: newPriorities.length > 0 ? newPriorities : undefined,
     });
   };
 

@@ -14,13 +14,13 @@ import type {
   GitHubConfig,
   GitHubServiceEvent,
   SyncState,
-} from '../../types/github';
+} from '../types/github';
 
-import type { WorkItem, StrategicInitiative, DashboardMetrics } from '../../types/workItem';
+import type { WorkItem, StrategicInitiative, DashboardMetrics } from '../types/workItem';
 
 import { gitHubService, GitHubService } from './github/GitHubService';
-import { developmentKPICalculator } from '../../metrics/DevelopmentKPIs';
-import { roiCalculator } from '../../metrics/ROICalculator';
+import { developmentKPICalculator } from '../metrics/DevelopmentKPIs';
+import { roiCalculator } from '../metrics/ROICalculator';
 
 // ============================================================================
 // Sync Configuration
@@ -55,11 +55,7 @@ export class SyncOrchestrator {
 
   private state: SyncState = {
     status: 'idle',
-    lastFullSync: null,
-    lastIncrementalSync: null,
-    lastGitAnalysis: null,
     pendingChanges: 0,
-    nextScheduledSync: null,
   };
 
   private listeners: Set<(state: SyncState) => void> = new Set();
@@ -112,7 +108,7 @@ export class SyncOrchestrator {
       this.syncIntervalId = null;
     }
 
-    this.updateState({ nextScheduledSync: null });
+    this.updateState({ nextScheduledSync: undefined });
   }
 
   /**
@@ -156,7 +152,7 @@ export class SyncOrchestrator {
         const linkedPRs = linkMap.get(issue.id.toString());
         if (linkedPRs) {
           workItem.linkedItems = linkedPRs.map((prId) => ({
-            type: 'pr' as const,
+            type: 'relates_to' as const,
             targetId: `gh-pr-${prId}`,
             source: 'github' as const,
           }));

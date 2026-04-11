@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import type { SyncState } from '../../../types/workItem';
+import type { SyncState } from '../../../../types/workItem';
 
 interface SyncStatusProps {
   syncState: SyncState;

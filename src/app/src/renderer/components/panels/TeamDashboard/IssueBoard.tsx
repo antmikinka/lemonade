@@ -5,25 +5,22 @@
  * Uses react-window for virtualized scrolling of issue lists
  */
 
-import React, { useCallback, useEffect, useRef, useMemo } from 'react';
+import React, { useCallback, useRef, useMemo } from 'react';
 import { FixedSizeList } from 'react-window';
 import { useTeamDashboard } from '../../../contexts/TeamDashboardContext';
-import { Issue, IssueStatus, STATUS_COLUMNS } from '../../../types/teamDashboard';
+import type { WorkItem, WorkItemStatus } from '../../../types/workItem';
+import { WORK_ITEM_STATUS_COLORS } from '../../../types/workItem';
 import IssueCard from './IssueCard';
 
 interface IssueBoardProps {
-  issues: Issue[];
+  issues: WorkItem[];
 }
 
 const ISSUE_CARD_HEIGHT = 120; // Height of each issue card in pixels
 const COLUMN_HEADER_HEIGHT = 48; // Height of column header
 
-interface IssueBoardProps {
-  issues: Issue[];
-}
-
 const IssueBoard: React.FC<IssueBoardProps> = ({ issues }) => {
-  const { moveIssue, selectIssue, state } = useTeamDashboard();
+  const { moveIssue, selectWorkItem, state } = useTeamDashboard();
   const draggedIssueRef = useRef<string | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
 
@@ -32,11 +29,13 @@ const IssueBoard: React.FC<IssueBoardProps> = ({ issues }) => {
 
   // Group issues by status
   const issuesByStatus = useMemo(() => {
-    const grouped: Record<IssueStatus, Issue[]> = {
+    const grouped: Record<WorkItemStatus, WorkItem[]> = {
       backlog: [],
       in_progress: [],
-      review: [],
+      in_review: [],
+      merged: [],
       done: [],
+      closed: [],
     };
 
     filteredIssues.forEach((issue) => {
@@ -45,6 +44,16 @@ const IssueBoard: React.FC<IssueBoardProps> = ({ issues }) => {
 
     return grouped;
   }, [filteredIssues]);
+
+  // Status columns configuration
+  const STATUS_COLUMNS = [
+    { id: 'backlog' as WorkItemStatus, label: 'Backlog', color: '#6b7280' },
+    { id: 'in_progress' as WorkItemStatus, label: 'In Progress', color: '#3b82f6' },
+    { id: 'in_review' as WorkItemStatus, label: 'In Review', color: '#f59e0b' },
+    { id: 'merged' as WorkItemStatus, label: 'Merged', color: '#8b5cf6' },
+    { id: 'done' as WorkItemStatus, label: 'Done', color: '#10b981' },
+    { id: 'closed' as WorkItemStatus, label: 'Closed', color: '#ef4444' },
+  ];
 
   // Handle drag start
   const handleDragStart = useCallback((e: React.DragEvent, issueId: string) => {
@@ -61,7 +70,7 @@ const IssueBoard: React.FC<IssueBoardProps> = ({ issues }) => {
 
   // Handle drop
   const handleDrop = useCallback(
-    (e: React.DragEvent, status: IssueStatus) => {
+    (e: React.DragEvent, status: WorkItemStatus) => {
       e.preventDefault();
       const issueId = draggedIssueRef.current;
       if (issueId) {
@@ -125,7 +134,7 @@ const IssueBoard: React.FC<IssueBoardProps> = ({ issues }) => {
                   overscanCount={5}
                   width="100%"
                 >
-                  {({ index, style, data }: { index: number; style: React.CSSProperties; data: Issue[] }) => {
+                  {({ index, style, data }: { index: number; style: React.CSSProperties; data: WorkItem[] }) => {
                     const issue = data[index];
                     return (
                       <div
@@ -151,16 +160,19 @@ const IssueBoard: React.FC<IssueBoardProps> = ({ issues }) => {
 /**
  * Memoized filter function for issues
  */
-const useMemoIssues = (issues: Issue[], filters: {
-  assignee?: string;
-  priority?: 'low' | 'medium' | 'high' | 'critical';
-  labels?: string[];
-  searchQuery?: string;
-}): Issue[] => {
+const useMemoIssues = (
+  issues: WorkItem[],
+  filters: {
+    assignee?: string;
+    priority?: 'low' | 'medium' | 'high' | 'critical';
+    labels?: string[];
+    searchQuery?: string;
+  }
+): WorkItem[] => {
   return React.useMemo(() => {
     return issues.filter((issue) => {
       // Filter by assignee
-      if (filters.assignee && issue.assignee?.id !== filters.assignee) {
+      if (filters.assignee && issue.assignees?.[0]?.id !== filters.assignee) {
         return false;
       }
 
@@ -172,7 +184,7 @@ const useMemoIssues = (issues: Issue[], filters: {
       // Filter by labels
       if (filters.labels && filters.labels.length > 0) {
         const hasMatchingLabel = filters.labels.some((label) =>
-          issue.labels.includes(label),
+          issue.labels.some((l) => l.name === label || l.id === label)
         );
         if (!hasMatchingLabel) {
           return false;
@@ -185,7 +197,7 @@ const useMemoIssues = (issues: Issue[], filters: {
         const matchesTitle = issue.title.toLowerCase().includes(query);
         const matchesDescription = issue.description.toLowerCase().includes(query);
         const matchesLabels = issue.labels.some((label) =>
-          label.toLowerCase().includes(query),
+          label.name.toLowerCase().includes(query)
         );
         if (!matchesTitle && !matchesDescription && !matchesLabels) {
           return false;

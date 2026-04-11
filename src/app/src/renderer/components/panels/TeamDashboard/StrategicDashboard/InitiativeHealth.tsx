@@ -4,7 +4,7 @@
  */
 
 import React, { useMemo } from 'react';
-import type { StrategicInitiative, DashboardMetrics } from '../../../types/workItem';
+import type { StrategicInitiative, DashboardMetrics } from '../../../../types/workItem';
 
 interface InitiativeHealthProps {
   initiatives: StrategicInitiative[];
@@ -126,7 +126,7 @@ export const InitiativeHealth: React.FC<InitiativeHealthProps> = ({
         <div className="initiative-roi-chart">
           <h4 className="chart-title">ROI by Initiative</h4>
           <div className="roi-bar-chart">
-            {roiStats.slice(0, 5).map((item, index) => (
+            {roiStats.slice(0, 5).map((item, index: number) => (
               <div key={index} className="roi-bar-item">
                 <div className="roi-bar-label">{item.name}</div>
                 <div className="roi-bar-container">

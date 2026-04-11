@@ -15,7 +15,7 @@ import type {
   IndustryRelevanceScore,
   StrategicTag,
   ROICategoryType,
-} from '../../types/workItem';
+} from '../types/workItem';
 
 // ============================================================================
 // Tech Trend Types

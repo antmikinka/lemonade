@@ -32,6 +32,8 @@ import type {
   Priority,
   StrategicTag,
   ROICategory,
+  WorkItemStatus,
+  TeamMetrics,
 } from '../types/workItem';
 
 import { syncOrchestrator, SyncConfig, tokenStorage } from '../services/SyncService';
@@ -135,10 +137,10 @@ const initialState: DashboardState = {
   selectedInitiative: undefined,
   syncState: {
     status: 'idle',
-    lastFullSync: null,
-    lastIncrementalSync: null,
-    lastGitAnalysis: null,
-    nextScheduledSync: null,
+    lastFullSync: undefined,
+    lastIncrementalSync: undefined,
+    lastGitAnalysis: undefined,
+    nextScheduledSync: undefined,
     pendingChanges: 0,
   },
   humanOverrides: {
@@ -565,11 +567,26 @@ export const TeamDashboardProvider: React.FC<TeamDashboardProviderProps> = ({
       return [];
     }
 
+    const teamMetrics: TeamMetrics = {
+      workloadDistribution: [],
+      collaboration: {
+        averageReviewersPerPR: 0,
+        crossTeamDependencies: 0,
+      },
+      capacity: {
+        totalCapacity: 0,
+        allocatedCapacity: 0,
+        availableCapacity: 0,
+        utilizationRate: 0,
+      },
+    };
+
     return aiInsightsEngine.generateInsights(
       state.workItems,
       calculatedMetrics.devKPIs,
       calculatedMetrics.roi,
       calculatedMetrics.relevance,
+      teamMetrics,
       state.initiatives
     );
   }, [calculatedMetrics, state.workItems, state.initiatives]);

@@ -39,7 +39,7 @@ export interface GitHubUser {
   id: number;
   node_id: string;
   avatar_url: string;
-  gravatar_id: string;
+  gravatar_id: string | null;
   url: string;
   html_url: string;
   followers_url: string;
@@ -250,10 +250,16 @@ export interface GitHubCommit {
   files?: GitHubCommitFile[];
 }
 
+export interface GitHubCommitAuthor {
+  name: string;
+  email: string;
+  date?: string;
+}
+
 export interface GitHubCommitDetail {
   url: string;
-  author?: GitHubUser;
-  committer?: GitHubUser;
+  author?: GitHubCommitAuthor;
+  committer?: GitHubCommitAuthor;
   message: string;
   tree: {
     sha: string;
@@ -367,6 +373,7 @@ export interface NormalizedIssue {
   author: GitHubUser;
   milestone?: GitHubMilestone;
   reactions?: GitHubReactions;
+  comments?: number;
   created_at: string;
   updated_at: string;
   closed_at?: string;
@@ -617,10 +624,10 @@ export class GitHubNotFoundError extends GitHubError {
 
 export interface SyncState {
   status: 'idle' | 'syncing' | 'completed' | 'error' | 'rate_limited';
-  lastFullSync: string | null;
-  lastIncrementalSync: string | null;
-  lastGitAnalysis: string | null;
-  nextScheduledSync: string | null;
+  lastFullSync?: string;
+  lastIncrementalSync?: string;
+  lastGitAnalysis?: string;
+  nextScheduledSync?: string;
   pendingChanges: number;
   error?: string;
   rateLimitInfo?: {

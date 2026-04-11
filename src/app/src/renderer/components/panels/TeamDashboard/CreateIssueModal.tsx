@@ -5,7 +5,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useTeamDashboard } from '../../../contexts/TeamDashboardContext';
-import { IssueStatus, IssuePriority, TeamMember } from '../../../types/teamDashboard';
+import type { WorkItem, WorkItemStatus, Priority, Label, Contributor } from '../../../types/workItem';
+import { PRIORITY_LABELS } from '../../../types/workItem';
 import { CloseIcon } from '../../../components/Icons';
 
 /**
@@ -82,7 +83,7 @@ interface CreateIssueModalProps {
 }
 
 const CreateIssueModal: React.FC<CreateIssueModalProps> = ({ isOpen, onClose }) => {
-  const { addIssue, state } = useTeamDashboard();
+  const { addWorkItem, state } = useTeamDashboard();
   const modalRef = useRef<HTMLDivElement>(null);
 
   // Apply focus trap when modal is open
@@ -105,10 +106,10 @@ const CreateIssueModal: React.FC<CreateIssueModalProps> = ({ isOpen, onClose }) 
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    status: 'backlog' as IssueStatus,
-    priority: 'medium' as IssuePriority,
+    status: 'backlog' as WorkItemStatus,
+    priority: 'medium' as Priority,
     assigneeId: '',
-    labels: [] as string[],
+    labels: [] as Label[],
     storyPoints: undefined as number | undefined,
     dueDate: undefined as string | undefined,
   });
@@ -152,35 +153,54 @@ const CreateIssueModal: React.FC<CreateIssueModalProps> = ({ isOpen, onClose }) 
       return;
     }
 
-    const assignee = formData.assigneeId
+    const assignee: Contributor | undefined = formData.assigneeId
       ? state.teamMembers.find((m) => m.id === formData.assigneeId)
       : undefined;
 
-    addIssue({
+    const now = new Date().toISOString();
+    addWorkItem({
       title: formData.title,
       description: formData.description,
       status: formData.status,
       priority: formData.priority,
-      assignee,
+      type: 'issue',
+      source: 'manual',
+      author: {
+        id: 'current-user',
+        name: 'Current User',
+      },
+      assignees: assignee ? [assignee] : [],
       labels: formData.labels,
-      storyPoints: formData.storyPoints,
-      dueDate: formData.dueDate,
+      metrics: {
+        age: 0,
+        estimatedPoints: formData.storyPoints,
+      } as any,
+      linkedItems: [],
     });
 
     onClose();
   };
 
   const handleAddLabel = () => {
-    if (newLabel.trim() && !formData.labels.includes(newLabel.trim())) {
-      setFormData({ ...formData, labels: [...formData.labels, newLabel.trim()] });
-      setNewLabel('');
+    if (newLabel.trim()) {
+      const existingLabel = formData.labels.find(l => l.name === newLabel.trim());
+      if (!existingLabel) {
+        const newLabelObj: Label = {
+          id: `label_${Date.now()}`,
+          name: newLabel.trim(),
+          color: '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0'),
+          source: 'manual',
+        };
+        setFormData({ ...formData, labels: [...formData.labels, newLabelObj] });
+        setNewLabel('');
+      }
     }
   };
 
-  const handleRemoveLabel = (labelToRemove: string) => {
+  const handleRemoveLabel = (labelToRemove: Label) => {
     setFormData({
       ...formData,
-      labels: formData.labels.filter((l) => l !== labelToRemove),
+      labels: formData.labels.filter((l) => l.id !== labelToRemove.id),
     });
   };
 
@@ -255,14 +275,16 @@ const CreateIssueModal: React.FC<CreateIssueModalProps> = ({ isOpen, onClose }) 
                   id="new-issue-status"
                   value={formData.status}
                   onChange={(e) =>
-                    setFormData({ ...formData, status: e.target.value as IssueStatus })
+                    setFormData({ ...formData, status: e.target.value as WorkItemStatus })
                   }
                   className="create-issue-select"
                 >
                   <option value="backlog">Backlog</option>
                   <option value="in_progress">In Progress</option>
-                  <option value="review">Review</option>
+                  <option value="in_review">In Review</option>
+                  <option value="merged">Merged</option>
                   <option value="done">Done</option>
+                  <option value="closed">Closed</option>
                 </select>
               </div>
 
@@ -272,7 +294,7 @@ const CreateIssueModal: React.FC<CreateIssueModalProps> = ({ isOpen, onClose }) 
                   id="new-issue-priority"
                   value={formData.priority}
                   onChange={(e) =>
-                    setFormData({ ...formData, priority: e.target.value as IssuePriority })
+                    setFormData({ ...formData, priority: e.target.value as Priority })
                   }
                   className="create-issue-select"
                 >
@@ -343,13 +365,13 @@ const CreateIssueModal: React.FC<CreateIssueModalProps> = ({ isOpen, onClose }) 
               <div className="create-issue-labels">
                 <div className="create-issue-labels-list">
                   {formData.labels.map((label) => (
-                    <span key={label} className="create-issue-label">
-                      {label}
+                    <span key={label.id} className="create-issue-label" style={{ backgroundColor: label.color + '20', color: label.color }}>
+                      {label.name}
                       <button
                         type="button"
                         className="create-issue-label-remove"
                         onClick={() => handleRemoveLabel(label)}
-                        aria-label={`Remove label ${label}`}
+                        aria-label={`Remove label ${label.name}`}
                       >
                         ×
                       </button>

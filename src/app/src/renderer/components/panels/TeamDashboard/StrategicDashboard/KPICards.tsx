@@ -4,7 +4,7 @@
  */
 
 import React, { useMemo } from 'react';
-import type { DashboardMetrics, DevelopmentKPIs } from '../../../types/workItem';
+import type { DashboardMetrics, DevelopmentKPIs } from '../../../../types/workItem';
 
 interface KPICardsProps {
   metrics: DashboardMetrics;
@@ -118,7 +118,7 @@ export const KPICards: React.FC<KPICardsProps> = ({ metrics }) => {
 // Helper Functions
 // ============================================================================
 
-function getTrendIcon(trend: string): JSX.Element {
+function getTrendIcon(trend: string): React.JSX.Element {
   const size = 16;
   switch (trend) {
     case 'increasing':
@@ -150,8 +150,8 @@ function getThroughputTrend(throughput: DevelopmentKPIs['throughput']): 'improvi
   const recent = throughput.throughputTrend.slice(-3);
   const previous = throughput.throughputTrend.slice(-6, -3);
 
-  const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
-  const previousAvg = previous.reduce((a, b) => a + b, 0) / previous.length;
+  const recentAvg = recent.reduce((a: number, b: number) => a + b, 0) / recent.length;
+  const previousAvg = previous.reduce((a: number, b: number) => a + b, 0) / previous.length;
 
   if (recentAvg > previousAvg * 1.1) return 'improving';
   if (recentAvg < previousAvg * 0.9) return 'degrading';

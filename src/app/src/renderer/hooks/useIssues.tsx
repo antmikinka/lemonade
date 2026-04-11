@@ -1,218 +1,232 @@
 /**
  * useIssues Hook
- * Provides convenient issue management operations
+ * Provides convenient work item management operations
  */
 
 import { useCallback } from 'react';
 import { useTeamDashboard } from '../contexts/TeamDashboardContext';
-import { Issue, IssueStatus, IssuePriority, TeamMember } from '../types/teamDashboard';
+import type { WorkItem, WorkItemStatus, Priority, TeamMember, Label } from '../types/workItem';
 
 /**
- * Custom hook for issue management operations
+ * Custom hook for work item management operations
  */
 export const useIssues = () => {
-  const { state, dispatch, addIssue, updateIssue, deleteIssue, moveIssue } = useTeamDashboard();
+  const { state, dispatch, addWorkItem, updateWorkItem, deleteWorkItem } = useTeamDashboard();
 
   /**
-   * Create a new issue with full type safety
+   * Create a new work item with full type safety
    */
-  const createIssue = useCallback(
+  const createWorkItem = useCallback(
     (
       title: string,
       description: string,
-      priority: IssuePriority = 'medium',
-      status: IssueStatus = 'backlog',
-      assignee?: TeamMember,
-      labels?: string[],
-      storyPoints?: number,
-      dueDate?: string,
-    ): Issue => {
+      priority: Priority = 'medium',
+      status: WorkItemStatus = 'backlog',
+      assignees?: TeamMember[],
+      labels?: Label[],
+    ): WorkItem => {
       const now = new Date().toISOString();
-      const newIssue: Issue = {
-        id: `issue_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      const author: { id: string; name: string } = { id: 'current-user', name: 'Current User' };
+      const newWorkItem: WorkItem = {
+        id: `manual_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        source: 'manual',
         title,
         description,
-        priority,
+        type: 'issue',
         status,
-        assignee,
+        priority,
+        author,
+        assignees: assignees || [],
         labels: labels || [],
-        storyPoints,
-        dueDate,
+        linkedItems: [],
         createdAt: now,
         updatedAt: now,
+        metrics: {
+          age: 0,
+          estimatedPoints: 0,
+        },
       };
 
-      addIssue({
+      addWorkItem({
+        source: 'manual',
         title,
         description,
-        priority,
+        type: 'issue',
         status,
-        assignee,
+        priority,
+        author,
+        assignees: assignees || [],
         labels: labels || [],
-        storyPoints,
-        dueDate,
+        linkedItems: [],
+        metrics: {
+          age: 0,
+          estimatedPoints: 0,
+        },
       });
 
-      return newIssue;
+      return newWorkItem;
     },
-    [addIssue],
+    [addWorkItem],
   );
 
   /**
-   * Update issue status and move to appropriate column
+   * Update work item status and move to appropriate column
    */
-  const transitionIssue = useCallback(
-    (issueId: string, newStatus: IssueStatus): void => {
-      moveIssue(issueId, newStatus);
-    },
-    [moveIssue],
-  );
-
-  /**
-   * Assign a team member to an issue
-   */
-  const assignIssue = useCallback(
-    (issueId: string, member: TeamMember | undefined): void => {
-      const issue = state.issues.find((i) => i.id === issueId);
-      if (issue) {
-        updateIssue({ ...issue, assignee: member, updatedAt: new Date().toISOString() });
+  const transitionWorkItem = useCallback(
+    (workItemId: string, newStatus: WorkItemStatus): void => {
+      const workItem = state.workItems.find((i) => i.id === workItemId);
+      if (workItem) {
+        updateWorkItem({ ...workItem, status: newStatus, updatedAt: new Date().toISOString() });
       }
     },
-    [state.issues, updateIssue],
+    [state.workItems, updateWorkItem],
   );
 
   /**
-   * Add a label to an issue
+   * Assign team members to a work item
    */
-  const addLabelToIssue = useCallback(
-    (issueId: string, label: string): void => {
-      const issue = state.issues.find((i) => i.id === issueId);
-      if (issue && !issue.labels.includes(label)) {
-        updateIssue({
-          ...issue,
-          labels: [...issue.labels, label],
+  const assignWorkItem = useCallback(
+    (workItemId: string, members: TeamMember[] | undefined): void => {
+      const workItem = state.workItems.find((i) => i.id === workItemId);
+      if (workItem) {
+        updateWorkItem({ ...workItem, assignees: members || [], updatedAt: new Date().toISOString() });
+      }
+    },
+    [state.workItems, updateWorkItem],
+  );
+
+  /**
+   * Add a label to a work item
+   */
+  const addLabelToWorkItem = useCallback(
+    (workItemId: string, label: Label): void => {
+      const workItem = state.workItems.find((i) => i.id === workItemId);
+      if (workItem && !workItem.labels.some((l) => l.id === label.id)) {
+        updateWorkItem({
+          ...workItem,
+          labels: [...workItem.labels, label],
           updatedAt: new Date().toISOString(),
         });
       }
     },
-    [state.issues, updateIssue],
+    [state.workItems, updateWorkItem],
   );
 
   /**
-   * Remove a label from an issue
+   * Remove a label from a work item
    */
-  const removeLabelFromIssue = useCallback(
-    (issueId: string, label: string): void => {
-      const issue = state.issues.find((i) => i.id === issueId);
-      if (issue) {
-        updateIssue({
-          ...issue,
-          labels: issue.labels.filter((l) => l !== label),
+  const removeLabelFromWorkItem = useCallback(
+    (workItemId: string, labelId: string): void => {
+      const workItem = state.workItems.find((i) => i.id === workItemId);
+      if (workItem) {
+        updateWorkItem({
+          ...workItem,
+          labels: workItem.labels.filter((l) => l.id !== labelId),
           updatedAt: new Date().toISOString(),
         });
       }
     },
-    [state.issues, updateIssue],
+    [state.workItems, updateWorkItem],
   );
 
   /**
-   * Mark an issue as resolved
+   * Mark a work item as resolved
    */
-  const resolveIssue = useCallback(
-    (issueId: string): void => {
-      const issue = state.issues.find((i) => i.id === issueId);
-      if (issue) {
-        updateIssue({
-          ...issue,
+  const resolveWorkItem = useCallback(
+    (workItemId: string): void => {
+      const workItem = state.workItems.find((i) => i.id === workItemId);
+      if (workItem) {
+        updateWorkItem({
+          ...workItem,
           status: 'done',
           resolvedAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         });
       }
     },
-    [state.issues, updateIssue],
+    [state.workItems, updateWorkItem],
   );
 
   /**
-   * Reopen a resolved issue
+   * Reopen a resolved work item
    */
-  const reopenIssue = useCallback(
-    (issueId: string): void => {
-      const issue = state.issues.find((i) => i.id === issueId);
-      if (issue) {
-        updateIssue({
-          ...issue,
+  const reopenWorkItem = useCallback(
+    (workItemId: string): void => {
+      const workItem = state.workItems.find((i) => i.id === workItemId);
+      if (workItem) {
+        updateWorkItem({
+          ...workItem,
           status: 'in_progress',
           resolvedAt: undefined,
           updatedAt: new Date().toISOString(),
         });
       }
     },
-    [state.issues, updateIssue],
+    [state.workItems, updateWorkItem],
   );
 
   /**
-   * Get issues by status
+   * Get work items by status
    */
-  const getIssuesByStatus = useCallback(
-    (status: IssueStatus): Issue[] => {
-      return state.issues.filter((issue) => issue.status === status);
+  const getWorkItemsByStatus = useCallback(
+    (status: WorkItemStatus): WorkItem[] => {
+      return state.workItems.filter((item: WorkItem) => item.status === status);
     },
-    [state.issues],
+    [state.workItems],
   );
 
   /**
-   * Get issues by assignee
+   * Get work items by assignee
    */
-  const getIssuesByAssignee = useCallback(
-    (assigneeId: string): Issue[] => {
-      return state.issues.filter((issue) => issue.assignee?.id === assigneeId);
+  const getWorkItemsByAssignee = useCallback(
+    (assigneeId: string): WorkItem[] => {
+      return state.workItems.filter((item: WorkItem) => item.assignees?.some((a) => a.id === assigneeId));
     },
-    [state.issues],
+    [state.workItems],
   );
 
   /**
-   * Search issues by query
+   * Search work items by query
    */
-  const searchIssues = useCallback(
-    (query: string): Issue[] => {
+  const searchWorkItems = useCallback(
+    (query: string): WorkItem[] => {
       const lowerQuery = query.toLowerCase();
-      return state.issues.filter(
-        (issue) =>
-          issue.title.toLowerCase().includes(lowerQuery) ||
-          issue.description.toLowerCase().includes(lowerQuery) ||
-          issue.labels.some((label) => label.toLowerCase().includes(lowerQuery)),
+      return state.workItems.filter(
+        (item: WorkItem) =>
+          item.title.toLowerCase().includes(lowerQuery) ||
+          item.description.toLowerCase().includes(lowerQuery) ||
+          item.labels.some((label: Label) => label.name.toLowerCase().includes(lowerQuery)),
       );
     },
-    [state.issues],
+    [state.workItems],
   );
 
   return {
     // State
-    issues: state.issues,
+    workItems: state.workItems,
     teamMembers: state.teamMembers,
-    selectedIssue: state.selectedIssue,
+    selectedWorkItem: state.selectedWorkItem,
     filters: state.filters,
 
     // CRUD operations
-    createIssue,
-    updateIssue,
-    deleteIssue,
-    transitionIssue,
+    createWorkItem,
+    updateWorkItem,
+    deleteWorkItem,
+    transitionWorkItem,
 
     // Assignment operations
-    assignIssue,
-    addLabelToIssue,
-    removeLabelFromIssue,
+    assignWorkItem,
+    addLabelToWorkItem,
+    removeLabelFromWorkItem,
 
     // Status operations
-    resolveIssue,
-    reopenIssue,
+    resolveWorkItem,
+    reopenWorkItem,
 
     // Query operations
-    getIssuesByStatus,
-    getIssuesByAssignee,
-    searchIssues,
+    getWorkItemsByStatus,
+    getWorkItemsByAssignee,
+    searchWorkItems,
   };
 };
 

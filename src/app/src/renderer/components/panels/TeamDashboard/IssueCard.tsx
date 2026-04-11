@@ -4,19 +4,20 @@
  */
 
 import React from 'react';
-import { Issue, PRIORITY_COLORS, PRIORITY_LABELS } from '../../../types/teamDashboard';
+import { PRIORITY_COLORS, PRIORITY_LABELS } from '../../../types/workItem';
+import type { WorkItem } from '../../../types/workItem';
 import { useTeamDashboard } from '../../../contexts/TeamDashboardContext';
 
 interface IssueCardProps {
-  issue: Issue;
-  onClick?: (issue: Issue) => void;
+  issue: WorkItem;
+  onClick?: (issue: WorkItem) => void;
 }
 
 const IssueCard: React.FC<IssueCardProps> = ({ issue, onClick }) => {
-  const { selectIssue, state } = useTeamDashboard();
+  const { selectWorkItem, state } = useTeamDashboard();
 
   const handleClick = () => {
-    selectIssue(issue);
+    selectWorkItem(issue);
     if (onClick) {
       onClick(issue);
     }
@@ -30,7 +31,7 @@ const IssueCard: React.FC<IssueCardProps> = ({ issue, onClick }) => {
   };
 
   const priorityColor = PRIORITY_COLORS[issue.priority];
-  const isSelected = state.selectedIssue?.id === issue.id;
+  const isSelected = state.selectedWorkItem?.id === issue.id;
 
   return (
     <div
@@ -65,7 +66,7 @@ const IssueCard: React.FC<IssueCardProps> = ({ issue, onClick }) => {
         <div className="issue-card-labels">
           {issue.labels.slice(0, 3).map((label, index) => (
             <span key={index} className="issue-card-label">
-              {label}
+              {label.name}
             </span>
           ))}
           {issue.labels.length > 3 && (
@@ -75,47 +76,40 @@ const IssueCard: React.FC<IssueCardProps> = ({ issue, onClick }) => {
       )}
 
       <div className="issue-card-footer">
-        {issue.assignee && (
-          <div className="issue-card-assignee" title={issue.assignee.name}>
-            {issue.assignee.avatar ? (
+        {issue.assignees && issue.assignees.length > 0 && (
+          <div className="issue-card-assignee" title={issue.assignees[0].name}>
+            {issue.assignees[0].avatar ? (
               <img
-                src={issue.assignee.avatar}
-                alt={issue.assignee.name}
+                src={issue.assignees[0].avatar}
+                alt={issue.assignees[0].name}
                 className="issue-card-avatar"
               />
             ) : (
               <div className="issue-card-avatar-placeholder">
-                {issue.assignee.name.charAt(0).toUpperCase()}
+                {issue.assignees[0].name.charAt(0).toUpperCase()}
               </div>
             )}
-            <span className="issue-card-assignee-name">{issue.assignee.name}</span>
+            <span className="issue-card-assignee-name">{issue.assignees[0].name}</span>
           </div>
         )}
 
-        {issue.storyPoints && (
-          <span className="issue-card-points" aria-label={`${issue.storyPoints} story points`}>
-            {issue.storyPoints} pts
+        {issue.metrics && issue.metrics.estimatedPoints && (
+          <span className="issue-card-points" aria-label={`${issue.metrics.estimatedPoints} story points`}>
+            {issue.metrics.estimatedPoints} pts
           </span>
         )}
 
-        {issue.dueDate && (
+        {issue.createdAt && (
           <span
-            className={`issue-card-due-date ${isOverdue(issue.dueDate) ? 'overdue' : ''}`}
-            title={`Due: ${formatDate(issue.dueDate)}`}
+            className="issue-card-due-date"
+            title={`Created: ${formatDate(issue.createdAt)}`}
           >
-            {formatRelativeDate(issue.dueDate)}
+            {formatRelativeDate(issue.createdAt)}
           </span>
         )}
       </div>
     </div>
   );
-};
-
-/**
- * Check if a date is overdue
- */
-const isOverdue = (dueDate: string): boolean => {
-  return new Date(dueDate) < new Date();
 };
 
 /**
@@ -136,13 +130,13 @@ const formatRelativeDate = (dateString: string): string => {
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
   if (diffDays < 0) {
-    return `${Math.abs(diffDays)}d overdue`;
+    return `${Math.abs(diffDays)}d ago`;
   } else if (diffDays === 0) {
     return 'Today';
   } else if (diffDays === 1) {
-    return 'Tomorrow';
+    return 'Yesterday';
   } else {
-    return `in ${diffDays}d`;
+    return `${diffDays}d ago`;
   }
 };
 

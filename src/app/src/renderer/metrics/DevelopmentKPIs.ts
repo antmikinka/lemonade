@@ -178,6 +178,8 @@ export class DevelopmentKPICalculator {
       issue: this.calculateAverageForType(cycleTimes, completedItems, 'issue'),
       pr: this.calculateAverageForType(cycleTimes, completedItems, 'pr'),
       commit: this.calculateAverageForType(cycleTimes, completedItems, 'commit'),
+      initiative: this.calculateAverageForType(cycleTimes, completedItems, 'initiative'),
+      epic: this.calculateAverageForType(cycleTimes, completedItems, 'epic'),
     };
 
     const trend = this.calculateCycleTimeTrend(cycleTimes, completedItems);

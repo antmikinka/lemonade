@@ -4,7 +4,7 @@
  */
 
 import React, { useMemo } from 'react';
-import type { DashboardMetrics, WorkItem } from '../../../types/workItem';
+import type { DashboardMetrics, WorkItem } from '../../../../types/workItem';
 
 interface PortfolioSummaryProps {
   metrics: DashboardMetrics;
@@ -62,7 +62,7 @@ export const PortfolioSummary: React.FC<PortfolioSummaryProps> = ({ metrics }) =
         </div>
 
         <div className="portfolio-summary-card velocity">
-          <div className="portfolio-summary-icon">></div>
+          <div className="portfolio-summary-icon">&gt;</div>
           <div className="portfolio-summary-content">
             <div className="portfolio-summary-label">Velocity</div>
             <div className="portfolio-summary-value">{summaryStats.velocity}</div>

@@ -4,7 +4,7 @@
  */
 
 import React, { useMemo } from 'react';
-import type { AIInsight, InsightSeverity } from '../../../types/workItem';
+import type { AIInsight, InsightSeverity, DataPoint } from '../../../../types/workItem';
 
 interface InsightsPanelProps {
   insights: AIInsight[];
@@ -97,7 +97,7 @@ export const InsightsPanel: React.FC<InsightsPanelProps> = ({
 
             {insight.dataPoints && insight.dataPoints.length > 0 && (
               <div className="insight-card-data">
-                {insight.dataPoints.map((point, index) => (
+                {insight.dataPoints.map((point: DataPoint, index: number) => (
                   <div key={index} className="insight-data-point">
                     <span className="insight-data-label">{point.label}</span>
                     <span className="insight-data-value">

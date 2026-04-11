@@ -6,16 +6,31 @@
 import React, { useMemo, useState } from 'react';
 import { useTeamDashboard } from '../../../contexts/TeamDashboardContext';
 import { getLast4Quarters } from '../../../utils/issueStorage';
+import type { WorkItemStatus } from '../../../types/workItem';
 
 const KPIDashboard: React.FC = () => {
-  const { getKPIMetrics, state } = useTeamDashboard();
+  const { state } = useTeamDashboard();
   const quarters = useMemo(() => getLast4Quarters(), []);
   const [selectedQuarter, setSelectedQuarter] = useState(quarters[quarters.length - 1]);
 
-  const metrics = useMemo(
-    () => getKPIMetrics(selectedQuarter),
-    [getKPIMetrics, selectedQuarter],
-  );
+  // Use metrics from state - calculated in TeamDashboardContext
+  const metrics = state.metrics.development;
+
+  // Calculate status counts from workItems
+  const statusCounts = useMemo(() => {
+    const total = state.workItems.length;
+    const backlog = state.workItems.filter((i) => i.status === 'backlog').length;
+    const inProgress = state.workItems.filter((i) => i.status === 'in_progress').length;
+    const inReview = state.workItems.filter((i) => i.status === 'in_review').length;
+    const done = state.workItems.filter((i) => i.status === 'done' || i.status === 'merged').length;
+    return { total, backlog, inProgress, inReview, done };
+  }, [state.workItems]);
+
+  // Get percentage for status bar
+  const getPercentage = (value: number, total: number): number => {
+    if (total === 0) return 0;
+    return Math.round((value / total) * 100);
+  };
 
   return (
     <div className="kpi-dashboard" role="region" aria-label="Team Performance Metrics">
@@ -49,7 +64,7 @@ const KPIDashboard: React.FC = () => {
             </svg>
           </div>
           <div className="kpi-metric-content">
-            <span className="kpi-metric-value">{metrics.issuesCompleted}</span>
+            <span className="kpi-metric-value">{metrics.throughput.itemsCompleted}</span>
             <span className="kpi-metric-label">Issues Completed</span>
           </div>
         </div>
@@ -61,8 +76,8 @@ const KPIDashboard: React.FC = () => {
             </svg>
           </div>
           <div className="kpi-metric-content">
-            <span className="kpi-metric-value">{metrics.velocity}</span>
-            <span className="kpi-metric-label">Velocity (issues/sprint)</span>
+            <span className="kpi-metric-value">{metrics.velocity.current}</span>
+            <span className="kpi-metric-label">Velocity</span>
           </div>
         </div>
 
@@ -74,8 +89,8 @@ const KPIDashboard: React.FC = () => {
             </svg>
           </div>
           <div className="kpi-metric-content">
-            <span className="kpi-metric-value">{metrics.avgResolutionTime}</span>
-            <span className="kpi-metric-label">Avg Resolution (days)</span>
+            <span className="kpi-metric-value">{Math.round(metrics.cycleTime.average)}</span>
+            <span className="kpi-metric-label">Avg Cycle Time (days)</span>
           </div>
         </div>
 
@@ -87,8 +102,8 @@ const KPIDashboard: React.FC = () => {
             </svg>
           </div>
           <div className="kpi-metric-content">
-            <span className="kpi-metric-value">{metrics.completionRate}%</span>
-            <span className="kpi-metric-label">Completion Rate</span>
+            <span className="kpi-metric-value">{metrics.codeQuality.defectRate}%</span>
+            <span className="kpi-metric-label">Defect Rate</span>
           </div>
         </div>
       </div>
@@ -98,54 +113,46 @@ const KPIDashboard: React.FC = () => {
         <div className="kpi-status-bar">
           <div
             className="kpi-status-segment backlog"
-            style={{ width: `${getPercentage(metrics.issuesInBacklog, metrics.totalIssues)}%` }}
-            title={`${metrics.issuesInBacklog} in backlog`}
+            style={{ width: `${getPercentage(statusCounts.backlog, statusCounts.total)}%` }}
+            title={`${statusCounts.backlog} in backlog`}
           />
           <div
             className="kpi-status-segment in-progress"
-            style={{ width: `${getPercentage(metrics.issuesInProgress, metrics.totalIssues)}%` }}
-            title={`${metrics.issuesInProgress} in progress`}
+            style={{ width: `${getPercentage(statusCounts.inProgress, statusCounts.total)}%` }}
+            title={`${statusCounts.inProgress} in progress`}
           />
           <div
             className="kpi-status-segment review"
-            style={{ width: `${getPercentage(metrics.issuesInReview, metrics.totalIssues)}%` }}
-            title={`${metrics.issuesInReview} in review`}
+            style={{ width: `${getPercentage(statusCounts.inReview, statusCounts.total)}%` }}
+            title={`${statusCounts.inReview} in review`}
           />
           <div
             className="kpi-status-segment done"
-            style={{ width: `${getPercentage(metrics.issuesCompleted, metrics.totalIssues)}%` }}
-            title={`${metrics.issuesCompleted} completed`}
+            style={{ width: `${getPercentage(statusCounts.done, statusCounts.total)}%` }}
+            title={`${statusCounts.done} completed`}
           />
         </div>
         <div className="kpi-status-legend">
           <div className="kpi-legend-item">
             <span className="kpi-legend-color backlog" />
-            <span>Backlog ({metrics.issuesInBacklog})</span>
+            <span>Backlog ({statusCounts.backlog})</span>
           </div>
           <div className="kpi-legend-item">
             <span className="kpi-legend-color in-progress" />
-            <span>In Progress ({metrics.issuesInProgress})</span>
+            <span>In Progress ({statusCounts.inProgress})</span>
           </div>
           <div className="kpi-legend-item">
             <span className="kpi-legend-color review" />
-            <span>Review ({metrics.issuesInReview})</span>
+            <span>Review ({statusCounts.inReview})</span>
           </div>
           <div className="kpi-legend-item">
             <span className="kpi-legend-color done" />
-            <span>Done ({metrics.issuesCompleted})</span>
+            <span>Done ({statusCounts.done})</span>
           </div>
         </div>
       </div>
     </div>
   );
-};
-
-/**
- * Calculate percentage for status bar
- */
-const getPercentage = (value: number, total: number): number => {
-  if (total === 0) return 0;
-  return Math.round((value / total) * 100);
 };
 
 export default KPIDashboard;

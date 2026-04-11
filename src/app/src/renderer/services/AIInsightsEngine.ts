@@ -18,7 +18,9 @@ import type {
   PortfolioROI,
   IndustryRelevanceScore,
   StrategicInitiative,
-} from '../../types/workItem';
+  DashboardMetrics,
+  TeamMetrics,
+} from '../types/workItem';
 
 // ============================================================================
 // Insight Generation Configuration
@@ -61,6 +63,7 @@ export class AIInsightsEngine {
     devKPIs: DevelopmentKPIs,
     roiAnalysis: PortfolioROI,
     relevanceScore: IndustryRelevanceScore,
+    teamMetrics: TeamMetrics,
     initiatives?: StrategicInitiative[]
   ): AIInsight[] {
     const insights: AIInsight[] = [];
@@ -75,14 +78,14 @@ export class AIInsightsEngine {
     insights.push(...this.generateRecommendations(devKPIs, roiAnalysis));
 
     // Identify risks
-    insights.push(...this.identifyRisks(workItems, devKPIs, initiatives));
+    insights.push(...this.identifyRisks(workItems, devKPIs, teamMetrics, initiatives));
 
     // Surface opportunities
     insights.push(...this.identifyOpportunities(workItems, relevanceScore));
 
     // Sort by severity and confidence
-    return insights.sort((a, b) => {
-      const severityOrder = { critical: 4, high: 3, medium: 2, low: 1 };
+    return insights.sort((a: AIInsight, b: AIInsight) => {
+      const severityOrder: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
       const severityDiff = severityOrder[b.severity] - severityOrder[a.severity];
       if (severityDiff !== 0) return severityDiff;
       return b.confidence - a.confidence;
@@ -317,7 +320,7 @@ export class AIInsightsEngine {
         dataPoints: [
           { label: 'Current ROI', value: roiAnalysis.roi.ratio },
           { label: 'Target ROI', value: 0.5 },
-          { label: 'Total Investment', value: roiAnalysis.totalInvestment.teamCost },
+          { label: 'Total Investment', value: roiAnalysis.totalInvestment.cost },
         ],
         recommendedAction:
           'Review strategic initiatives and focus on high-impact work. Consider sunsetting low-impact projects.',
@@ -380,6 +383,7 @@ export class AIInsightsEngine {
   private identifyRisks(
     workItems: WorkItem[],
     devKPIs: DevelopmentKPIs,
+    teamMetrics: TeamMetrics,
     initiatives?: StrategicInitiative[]
   ): AIInsight[] {
     const insights: AIInsight[] = [];
@@ -458,7 +462,7 @@ export class AIInsightsEngine {
     }
 
     // Burnout risk from high utilization
-    const capacity = devKPIs.team?.capacity;
+    const capacity = teamMetrics.capacity;
     if (capacity && capacity.utilizationRate > 0.9) {
       insights.push({
         id: this.generateId('risk-burnout'),
@@ -582,7 +586,7 @@ export class AIInsightsEngine {
   private getLowestDimension(
     dimensions: IndustryRelevanceScore['dimensions']
   ): string {
-    const entries = Object.entries(dimensions);
+    const entries = Object.entries(dimensions) as Array<[string, number]>;
     const lowest = entries.reduce((min, [key, value]) =>
       value < min[1] ? [key, value] : min
     , entries[0]);

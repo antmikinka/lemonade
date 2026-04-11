@@ -27,6 +27,9 @@ import type {
   GitHubIssue,
   GitHubPullRequest,
   GitHubCommit,
+  GitHubUser,
+  GitHubLabel,
+  GitHubCommitAuthor,
 } from '../../types/github';
 
 import type { WorkItem, Contributor, Label } from '../../types/workItem';
@@ -118,13 +121,27 @@ export const GitHubNormalizer = {
   },
 
   normalizeCommit(commit: GitHubCommit): NormalizedCommit {
-    const defaultUser: GitHubUser = { login: 'unknown', id: 0, node_id: '', avatar_url: '', gravatar_id: '', url: '', html_url: '', followers_url: '', following_url: '', gists_url: '', starred_url: '', subscriptions_url: '', organizations_url: '', repos_url: '', events_url: '', received_events_url: '', type: 'User', site_admin: false, created_at: '', updated_at: '' };
+    const defaultUser: GitHubUser = { login: 'unknown', id: 0, node_id: '', avatar_url: '', gravatar_id: null, url: '', html_url: '', followers_url: '', following_url: '', gists_url: '', starred_url: '', subscriptions_url: '', organizations_url: '', repos_url: '', events_url: '', received_events_url: '', type: 'User', site_admin: false, created_at: '', updated_at: '' };
+
+    // Helper to convert GitHubCommitAuthor to GitHubUser
+    const toGitHubUser = (author: GitHubUser | GitHubCommitAuthor | undefined): GitHubUser => {
+      if (!author) return defaultUser;
+      if ('login' in author && 'id' in author) return author as GitHubUser;
+      // Convert GitHubCommitAuthor to GitHubUser
+      const commitAuthor = author as GitHubCommitAuthor;
+      return {
+        ...defaultUser,
+        login: commitAuthor.name || commitAuthor.email || 'unknown',
+        name: commitAuthor.name,
+        email: commitAuthor.email,
+      };
+    };
 
     return {
       sha: commit.sha,
       message: commit.commit.message,
-      author: commit.author ?? commit.commit.author ?? defaultUser,
-      committer: commit.committer ?? commit.commit.committer ?? defaultUser,
+      author: toGitHubUser(commit.author ?? commit.commit.author),
+      committer: toGitHubUser(commit.committer ?? commit.commit.committer),
       timestamp: commit.commit.author?.date ?? commit.commit.committer?.date ?? new Date().toISOString(),
       files: commit.files?.map((f) => ({
         filename: f.filename,
@@ -338,7 +355,7 @@ export class GitHubService implements IGitHubService {
       const { data: user } = await this.octokit.users.getAuthenticated();
       this.authState = {
         authenticated: true,
-        user,
+        user: user as GitHubUser,
         scopes: this.extractScopes(),
       };
       return true;
@@ -374,8 +391,8 @@ export class GitHubService implements IGitHubService {
 
       await this.updateRateLimitInfo();
 
-      const normalizedIssues = issues.map((issue: GitHubIssue) =>
-        GitHubNormalizer.normalizeIssue(issue)
+      const normalizedIssues = issues.map((issue) =>
+        GitHubNormalizer.normalizeIssue(issue as GitHubIssue)
       );
 
       this.emitEvent({
@@ -420,14 +437,14 @@ export class GitHubService implements IGitHubService {
 
       // Enrich with review data
       const prsWithReviews = await Promise.all(
-        prs.map(async (pr: GitHubPullRequest) => {
+        prs.map(async (pr) => {
           const reviews = await this.fetchPRReviews(pr.number);
           return { ...pr, reviews };
         })
       );
 
-      const normalizedPRs = prsWithReviews.map((pr: GitHubPullRequest) =>
-        GitHubNormalizer.normalizePullRequest(pr)
+      const normalizedPRs = prsWithReviews.map((pr) =>
+        GitHubNormalizer.normalizePullRequest(pr as unknown as GitHubPullRequest)
       );
 
       return {
@@ -465,8 +482,8 @@ export class GitHubService implements IGitHubService {
         page: options?.page || 1,
       });
 
-      const normalizedCommits = commits.map((commit: GitHubCommit) =>
-        GitHubNormalizer.normalizeCommit(commit)
+      const normalizedCommits = commits.map((commit) =>
+        GitHubNormalizer.normalizeCommit(commit as GitHubCommit)
       );
 
       return {
@@ -501,7 +518,7 @@ export class GitHubService implements IGitHubService {
         pull_number: prNumber,
       });
 
-      return reviews;
+      return reviews as unknown as GitHubReview[];
     } catch (error) {
       console.error(`Failed to fetch reviews for PR #${prNumber}:`, error);
       return [];
@@ -523,7 +540,7 @@ export class GitHubService implements IGitHubService {
         issue_number: issueNumber,
       });
 
-      return timeline;
+      return timeline as unknown as GitHubTimelineEvent[];
     } catch (error) {
       console.error(`Failed to fetch timeline for issue #${issueNumber}:`, error);
       return [];

@@ -77,7 +77,11 @@ export class ROICalculator {
     const byCategory = this.calculateByCategory(workItems);
 
     return {
-      totalInvestment: effort,
+      totalInvestment: {
+        storyPoints: effort.totalStoryPoints,
+        hours: effort.totalHours,
+        cost: effort.teamCost,
+      },
       totalImpact: impact,
       roi,
       byCategory,

@@ -6,6 +6,7 @@ import React from 'react';
 interface IconProps {
   size?: number;
   strokeWidth?: number;
+  className?: string;
 }
 
 export const ChevronLeft: React.FC<IconProps> = ({ size = 24, strokeWidth = 2 }) => (
@@ -169,22 +170,22 @@ export const MicrophoneIcon: React.FC<{ active?: boolean }> = ({ active = false 
   </svg>
 );
 
-export const CloseIcon: React.FC<IconProps> = ({ size = 24, strokeWidth = 2 }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+export const CloseIcon: React.FC<IconProps> = ({ size = 24, strokeWidth = 2, className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" className={className}>
     <path d="M18 6 6 18" />
     <path d="m6 6 12 12" />
   </svg>
 );
 
-export const PlusIcon: React.FC<IconProps> = ({ size = 24, strokeWidth = 2 }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+export const PlusIcon: React.FC<IconProps> = ({ size = 24, strokeWidth = 2, className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" className={className}>
     <path d="M5 12h14" />
     <path d="M12 5v14" />
   </svg>
 );
 
-export const BoardIcon: React.FC<IconProps> = ({ size = 24, strokeWidth = 2 }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+export const BoardIcon: React.FC<IconProps> = ({ size = 24, strokeWidth = 2, className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" className={className}>
     <rect width="18" height="18" x="3" y="3" rx="2" />
     <path d="M8 7v10" />
     <path d="M12 7v10" />
@@ -192,45 +193,45 @@ export const BoardIcon: React.FC<IconProps> = ({ size = 24, strokeWidth = 2 }) =
   </svg>
 );
 
-export const ListIcon: React.FC<IconProps> = ({ size = 24, strokeWidth = 2 }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+export const ListIcon: React.FC<IconProps> = ({ size = 24, strokeWidth = 2, className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" className={className}>
     <path d="M3 6h18" />
     <path d="M3 12h18" />
     <path d="M3 18h18" />
   </svg>
 );
 
-export const SearchIcon: React.FC<IconProps> = ({ size = 24, strokeWidth = 2 }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+export const SearchIcon: React.FC<IconProps> = ({ size = 24, strokeWidth = 2, className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" className={className}>
     <circle cx="11" cy="11" r="8" />
     <path d="m21 21-4.3-4.3" />
   </svg>
 );
 
-export const FilterIcon: React.FC<IconProps> = ({ size = 24, strokeWidth = 2 }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+export const FilterIcon: React.FC<IconProps> = ({ size = 24, strokeWidth = 2, className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" className={className}>
     <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
   </svg>
 );
 
-export const BarChartIcon: React.FC<IconProps> = ({ size = 24, strokeWidth = 2 }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+export const BarChartIcon: React.FC<IconProps> = ({ size = 24, strokeWidth = 2, className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" className={className}>
     <line x1="12" y1="20" x2="12" y2="10" />
     <line x1="18" y1="20" x2="18" y2="4" />
     <line x1="6" y1="20" x2="6" y2="16" />
   </svg>
 );
 
-export const TargetIcon: React.FC<IconProps> = ({ size = 24, strokeWidth = 2 }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+export const TargetIcon: React.FC<IconProps> = ({ size = 24, strokeWidth = 2, className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" className={className}>
     <circle cx="12" cy="12" r="10" />
     <circle cx="12" cy="12" r="6" />
     <circle cx="12" cy="12" r="2" />
   </svg>
 );
 
-export const RefreshCwIcon: React.FC<IconProps> = ({ size = 24, strokeWidth = 2 }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+export const RefreshCwIcon: React.FC<IconProps> = ({ size = 24, strokeWidth = 2, className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" className={className}>
     <path d="M1 4v6h6" />
     <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
   </svg>
