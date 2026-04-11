@@ -12,6 +12,7 @@ const RECIPE_ORDER = new Map([
   'whispercpp',
   'sd-cpp',
   'kokoro',
+  'kitten-tts',
   'flm',
   'ryzenai-llm',
 ].map((recipe, index) => [recipe, index]));

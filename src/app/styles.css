@@ -1868,6 +1868,14 @@ footer {
     box-shadow: 0 0 2px rgba(226, 183, 87, 0.45);
 }
 
+.model-label.label-tts {
+    background: #F472B6;
+}
+
+.model-label.label-speech {
+    background: #FB923C;
+}
+
 .model-manager-footer {
     border-top: 1px solid #1a1a1a;
     background: #000000;

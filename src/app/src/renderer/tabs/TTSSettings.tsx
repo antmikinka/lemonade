@@ -22,7 +22,16 @@ export const voiceOptions: string[] = [
   'verse',
   'marin',
   'cedar',
-  'alloy'
+  'alloy',
+  // KittenTTS voices
+  'bella',
+  'jasper',
+  'luna',
+  'bruno',
+  'rosie',
+  'hugo',
+  'kiki',
+  'leo'
 ];
 
 const TTSSettings: React.FC<TTSSettingsProps> = ({settings, onValueChangeFunc, onResetFunc}) => {

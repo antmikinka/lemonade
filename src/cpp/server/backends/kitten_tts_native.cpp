@@ -7,11 +7,11 @@ namespace fs = std::filesystem;
 namespace lemon {
 namespace backends {
 
-KittenTtsEngine::KittenTtsEngine() = default;
+KittenTtsNative::KittenTtsNative() = default;
 
-KittenTtsEngine::~KittenTtsEngine() = default;
+KittenTtsNative::~KittenTtsNative() = default;
 
-bool KittenTtsEngine::initialize(const std::string& model_dir) {
+bool KittenTtsNative::initialize(const std::string& model_dir) {
     model_dir_ = model_dir;
 
     // Check for required files
@@ -54,7 +54,7 @@ bool KittenTtsEngine::initialize(const std::string& model_dir) {
     return true;
 }
 
-std::vector<float> KittenTtsEngine::synthesize(
+std::vector<float> KittenTtsNative::synthesize(
     const std::string& text,
     const std::string& voice_name,
     float speed
@@ -90,14 +90,14 @@ std::vector<float> KittenTtsEngine::synthesize(
     return audio;
 }
 
-std::vector<std::string> KittenTtsEngine::get_available_voices() const {
+std::vector<std::string> KittenTtsNative::get_available_voices() const {
     if (!initialized_) {
         return {};
     }
     return voice_manager_->get_available_voices();
 }
 
-int KittenTtsEngine::get_sample_rate() const {
+int KittenTtsNative::get_sample_rate() const {
     return voice_manager_->get_sample_rate();
 }
 

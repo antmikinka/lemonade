@@ -15,10 +15,10 @@ namespace backends {
  * Main KittenTTS engine orchestrating all components.
  * Synthesizes speech from text using ONNX inference.
  */
-class KittenTtsEngine {
+class KittenTtsNative {
 public:
-    KittenTtsEngine();
-    ~KittenTtsEngine();
+    KittenTtsNative();
+    ~KittenTtsNative();
 
     // Initialize engine with model directory
     bool initialize(const std::string& model_dir);
@@ -36,8 +36,8 @@ public:
     // Get sample rate
     int get_sample_rate() const;
 
-    // Check if initialized
-    bool is_initialized() const { return initialized_; }
+    // Check if loaded
+    bool is_loaded() const { return initialized_; }
 
 private:
     bool initialized_ = false;

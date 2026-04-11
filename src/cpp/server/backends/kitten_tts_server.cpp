@@ -193,13 +193,28 @@ void KittenTtsServer::encode_and_stream(
         sink.write(reinterpret_cast<const char*>(wav_data.data()), wav_data.size());
     } else if (format == "mp3") {
         // MP3 encoding (streaming)
-        AudioEncoder::encode_mp3_streaming(audio, sample_rate, sink, 128);
+        if (!AudioEncoder::encode_mp3_streaming(audio, sample_rate, sink, 128)) {
+            LOG(WARNING, "KittenTtsServer") << "MP3 encoding failed, falling back to WAV" << std::endl;
+            std::vector<uint8_t> wav_data;
+            AudioEncoder::encode_wav(audio, sample_rate, wav_data);
+            sink.write(reinterpret_cast<const char*>(wav_data.data()), wav_data.size());
+        }
     } else if (format == "opus") {
-        // Opus encoding (streaming)
-        AudioEncoder::encode_opus_streaming(audio, sample_rate, sink, 96);
+        // Opus encoding (streaming) - fallback to WAV
+        if (!AudioEncoder::encode_opus_streaming(audio, sample_rate, sink, 96)) {
+            LOG(WARNING, "KittenTtsServer") << "Opus encoding not available, falling back to WAV" << std::endl;
+            std::vector<uint8_t> wav_data;
+            AudioEncoder::encode_wav(audio, sample_rate, wav_data);
+            sink.write(reinterpret_cast<const char*>(wav_data.data()), wav_data.size());
+        }
     } else if (format == "aac") {
-        // AAC encoding (streaming)
-        AudioEncoder::encode_aac_streaming(audio, sample_rate, sink, 128);
+        // AAC encoding (streaming) - fallback to WAV
+        if (!AudioEncoder::encode_aac_streaming(audio, sample_rate, sink, 128)) {
+            LOG(WARNING, "KittenTtsServer") << "AAC encoding not available, falling back to WAV" << std::endl;
+            std::vector<uint8_t> wav_data;
+            AudioEncoder::encode_wav(audio, sample_rate, wav_data);
+            sink.write(reinterpret_cast<const char*>(wav_data.data()), wav_data.size());
+        }
     } else if (format == "pcm") {
         // Raw PCM (int16)
         AudioEncoder::write_pcm_streaming(audio, sink, true);
@@ -207,9 +222,11 @@ void KittenTtsServer::encode_and_stream(
         // Raw PCM (float32)
         AudioEncoder::write_pcm_streaming(audio, sink, false);
     } else {
-        // Default to MP3
-        LOG(WARNING, "KittenTtsServer") << "Unknown format: " << format << ", defaulting to mp3" << std::endl;
-        AudioEncoder::encode_mp3_streaming(audio, sample_rate, sink, 128);
+        // Default to WAV with warning
+        LOG(WARNING, "KittenTtsServer") << "Unknown format: " << format << ", defaulting to WAV" << std::endl;
+        std::vector<uint8_t> wav_data;
+        AudioEncoder::encode_wav(audio, sample_rate, wav_data);
+        sink.write(reinterpret_cast<const char*>(wav_data.data()), wav_data.size());
     }
 }
 

@@ -1,8 +1,7 @@
 #include "lemon/backends/kitten_tts_phonemizer.h"
 #include <iostream>
 #include <algorithm>
-#include <codecvt>
-#include <locale>
+#include <cstdint>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -56,9 +55,28 @@ std::string KittenTtsPhonemizer::phonemize(const std::string& text) {
         return "";
     }
 
-    // Convert UTF-8 to wide string
-    std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
-    std::wstring wide_text = converter.from_bytes(text);
+    // Convert UTF-8 to wide string (manual implementation, no deprecated APIs)
+    std::wstring wide_text;
+    wide_text.reserve(text.size());
+    const uint8_t* bytes = reinterpret_cast<const uint8_t*>(text.c_str());
+    const uint8_t* end = bytes + text.size();
+    while (bytes < end) {
+        uint32_t cp = 0;
+        if (bytes[0] < 0x80) {
+            cp = bytes[0];
+            bytes += 1;
+        } else if (bytes[0] < 0xE0) {
+            cp = ((bytes[0] & 0x1F) << 6) | (bytes[1] & 0x3F);
+            bytes += 2;
+        } else if (bytes[0] < 0xF0) {
+            cp = ((bytes[0] & 0x0F) << 12) | ((bytes[1] & 0x3F) << 6) | (bytes[2] & 0x3F);
+            bytes += 3;
+        } else {
+            cp = ((bytes[0] & 0x07) << 18) | ((bytes[1] & 0x3F) << 12) | ((bytes[2] & 0x3F) << 6) | (bytes[3] & 0x3F);
+            bytes += 4;
+        }
+        wide_text.push_back(static_cast<wchar_t>(cp));
+    }
 
     wchar_t* phonemes_out = nullptr;
     wchar_t* tracking_out = nullptr;
@@ -83,12 +101,27 @@ std::string KittenTtsPhonemizer::phonemize(const std::string& text) {
         return "";
     }
 
-    // Convert result to UTF-8 string
-    std::string result_str = converter.to_bytes(phonemes_out);
-
-    // Free allocated memory (espeak-ng allocates internally)
-    // Note: In a real implementation, we'd need to call the appropriate free function
-    // For now, we'll just leak (espeak-ng manages this internally)
+    // Convert wide string result back to UTF-8 (manual implementation)
+    std::string result_str;
+    const wchar_t* wp = phonemes_out;
+    while (*wp) {
+        uint32_t cp = static_cast<uint32_t>(*wp++);
+        if (cp < 0x80) {
+            result_str.push_back(static_cast<char>(cp));
+        } else if (cp < 0x800) {
+            result_str.push_back(static_cast<char>(0xC0 | (cp >> 6)));
+            result_str.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+        } else if (cp < 0x10000) {
+            result_str.push_back(static_cast<char>(0xE0 | (cp >> 12)));
+            result_str.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+            result_str.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+        } else {
+            result_str.push_back(static_cast<char>(0xF0 | (cp >> 18)));
+            result_str.push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
+            result_str.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+            result_str.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+        }
+    }
 
     return result_str;
 }

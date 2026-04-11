@@ -440,7 +440,9 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isContentVisible, onContent
       'reranking': 'Reranking',
       'tool-calling': 'Tool Calling',
       'custom': 'Custom',
-      'uncategorized': 'Uncategorized'
+      'uncategorized': 'Uncategorized',
+      'tts': 'Text-to-Speech',
+      'speech': 'Speech'
     };
     return labels[category] || category.charAt(0).toUpperCase() + category.slice(1);
   };
