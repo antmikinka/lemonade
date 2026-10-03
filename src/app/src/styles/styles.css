@@ -5428,7 +5428,7 @@ optgroup {
 
 /* Surgical prototype UI fixes: collapsed rail, copy/retry actions, high-context controls */
 .chat:not(.rail-expanded) .rail__list,
-.chat:not(.rail-expanded) .rail__search-wrap,
+.chat:not(.rail-expanded) .rail > .rail__search-wrap,
 .chat:not(.rail-expanded) .rail__privacy {
   display: none;
 }

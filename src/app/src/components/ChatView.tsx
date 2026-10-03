@@ -2223,7 +2223,6 @@ const ChatView: React.FC<ChatViewProps> = ({
     });
   }, [conversations, railQuery]);
 
-
   const handleRailToggle = useCallback(() => {
     if (window.innerWidth <= 480) {
       setMobileSheetOpen(prev => !prev);
@@ -2256,6 +2255,7 @@ const ChatView: React.FC<ChatViewProps> = ({
 
   const closeMobileSheet = useCallback(() => {
     setMobileSheetOpen(false);
+    setRenamingId(null);
     sheetTriggerRef.current?.focus();
   }, []);
 
@@ -3408,7 +3408,10 @@ ${finalText}`
   ) => {
     const capability = c.model?.capability || 'chat';
     const isSelected = c.id === activeId;
-    const isTabTarget = isSelected || (idx === 0 && !activeId);
+    // When search filters the active conversation out, the first visible row
+    // must inherit the tab stop or the listbox is keyboard-unreachable.
+    const isTabTarget = isSelected
+      || (idx === 0 && (!activeId || !visibleConversations.some(v => v.id === activeId)));
     const convTitle = c.title || deriveTitle(c.messages);
     const isStreaming = streaming.streamingConvoIds.has(c.id);
     const lastMessage = c.messages[c.messages.length - 1];
@@ -3419,6 +3422,7 @@ ${finalText}`
       <input
         className="rail__rename-input"
         value={renameDraft}
+        maxLength={120}
         autoFocus
         aria-label={`Rename conversation: ${convTitle}`}
         onClick={event => event.stopPropagation()}
@@ -3465,6 +3469,9 @@ ${finalText}`
         statusText={isStreaming ? 'Generating' : failed ? 'Last reply failed' : undefined}
         statusLabel={isStreaming ? 'Generating a reply' : failed ? 'The last reply failed' : undefined}
         selected={isSelected}
+        // role="option" treats children as presentational, which would hide the
+        // rename input from assistive tech; drop to listitem while editing.
+        selectable={!isRenaming}
         tabIndex={isTabTarget ? 0 : -1}
         ariaLabel={`${convTitle}${c.model?.name ? `, ${c.model.name}` : ''}${isStreaming ? ', generating' : failed ? ', last reply failed' : ''}, ${timeAgo(c.updatedAt)}`}
         ariaKeyShortcuts="F2"
@@ -3523,6 +3530,9 @@ ${finalText}`
               onKeyDown={event => {
                 if (event.key === 'Escape' && railQuery) {
                   event.preventDefault();
+                  // Consuming Escape here must not also trip the document-level
+                  // handler that closes the mobile sheet.
+                  event.stopPropagation();
                   setRailQuery('');
                 }
               }}
@@ -3608,6 +3618,9 @@ ${finalText}`
               onKeyDown={event => {
                 if (event.key === 'Escape' && railQuery) {
                   event.preventDefault();
+                  // Consuming Escape here must not also trip the document-level
+                  // handler that closes the mobile sheet.
+                  event.stopPropagation();
                   setRailQuery('');
                 }
               }}
