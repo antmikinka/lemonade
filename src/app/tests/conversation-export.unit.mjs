@@ -14,7 +14,6 @@ const exportedAt = new Date('2026-10-03T12:00:00.000Z');
 const basic = conversationToMarkdown({
   title: 'Trip planning',
   modelName: 'Llama-3.2-1B-Instruct',
-  updatedAt: 0,
   messages: [
     { role: 'user', content: 'Where should I go?' },
     { role: 'assistant', content: 'Try **Kyoto**.' },
@@ -44,7 +43,6 @@ assert.equal(basic, [
 const anonymous = conversationToMarkdown({
   title: 'Quick question',
   modelName: null,
-  updatedAt: 0,
   messages: [{ role: 'assistant', content: 'Hi!' }],
 }, exportedAt);
 
@@ -53,10 +51,26 @@ assert.match(anonymous, /^# Quick question\n\n- Exported: /,
 assert.match(anonymous, /## Assistant\n\nHi!/,
   'assistant sections must fall back to a generic heading without a model name');
 
+const switched = conversationToMarkdown({
+  title: 'Model switch',
+  modelName: 'Model-A',
+  messages: [
+    { role: 'assistant', content: 'from A' },
+    { role: 'assistant', content: 'from B', modelName: 'Model-B' },
+    { role: 'assistant', content: 'anon' },
+  ],
+}, exportedAt);
+
+assert.match(switched, /## Model-A\n\nfrom A/,
+  'messages without their own model must use the conversation model heading');
+assert.match(switched, /## Model-B\n\nfrom B/,
+  'a mid-conversation model switch must be attributed to the model that actually replied');
+assert.match(switched, /## Model-A\n\nanon/,
+  'attribution must fall back per message, not stick from the previous one');
+
 const withError = conversationToMarkdown({
   title: 'Broken run',
   modelName: 'Model-X',
-  updatedAt: 0,
   messages: [
     { role: 'user', content: 'do a thing' },
     { role: 'assistant', content: 'Error: backend exploded\nsecond line', isError: true },
@@ -69,7 +83,6 @@ assert.match(withError, /_\(This reply failed\.\)_\n\n> Error: backend exploded\
 const emptyContent = conversationToMarkdown({
   title: 'Mostly empty',
   modelName: null,
-  updatedAt: 0,
   messages: [
     { role: 'user', content: '   ' },
     { role: 'assistant', content: '' },
@@ -82,7 +95,6 @@ assert.match(emptyContent, /_No messages to export\._/,
 const untitled = conversationToMarkdown({
   title: '   ',
   modelName: undefined,
-  updatedAt: 0,
   messages: [{ role: 'user', content: 'hi' }],
 }, exportedAt);
 
@@ -90,8 +102,8 @@ assert.match(untitled, /^# Untitled conversation\n/,
   'a blank title must fall back to a readable heading');
 
 assert.equal(
-  conversationToMarkdown({ title: 'T', updatedAt: 0, messages: [{ role: 'user', content: 'hi' }] }, exportedAt),
-  conversationToMarkdown({ title: 'T', updatedAt: 0, messages: [{ role: 'user', content: 'hi' }] }, exportedAt),
+  conversationToMarkdown({ title: 'T', messages: [{ role: 'user', content: 'hi' }] }, exportedAt),
+  conversationToMarkdown({ title: 'T', messages: [{ role: 'user', content: 'hi' }] }, exportedAt),
   'exports must be deterministic for a fixed timestamp');
 
 // ── conversationExportFilename ─────────────────────────────────────────────
@@ -105,6 +117,8 @@ assert.equal(conversationExportFilename('report.'), 'report.md',
   'a trailing dot must not survive into the filename');
 assert.equal(conversationExportFilename('CON'), 'conversation-CON.md',
   'Windows reserved stems must be prefixed');
+assert.equal(conversationExportFilename('CON.md'), 'conversation-CON.md.md',
+  'Windows matches reserved names before the first dot, so an embedded extension does not launder them');
 assert.equal(conversationExportFilename('lpt9'), 'conversation-lpt9.md');
 assert.equal(conversationExportFilename(''), 'conversation.md', 'empty titles need a fallback');
 assert.equal(conversationExportFilename('\u0000\u0001'), 'conversation.md',

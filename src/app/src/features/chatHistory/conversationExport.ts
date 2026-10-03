@@ -2,12 +2,14 @@ export interface ExportableMessage {
   role: 'user' | 'assistant';
   content: string;
   isError?: boolean;
+  /** Set when the message's own model differs from the conversation's —
+      mid-conversation model switches must stay attributable in the export. */
+  modelName?: string | null;
 }
 
 export interface ExportableConversation {
   title: string;
   modelName?: string | null;
-  updatedAt: number;
   messages: ExportableMessage[];
 }
 
@@ -34,7 +36,8 @@ export function conversationToMarkdown(
   for (const message of convo.messages) {
     const content = message.content.trim();
     if (!content && !message.isError) continue;
-    const heading = message.role === 'user' ? '## You' : `## ${assistantLabel}`;
+    const speaker = message.modelName?.trim() || assistantLabel;
+    const heading = message.role === 'user' ? '## You' : `## ${speaker}`;
     if (message.isError) {
       sections.push(`${heading}\n\n_(This reply failed.)_\n\n${blockquote(content)}`);
     } else {
@@ -58,7 +61,9 @@ export function conversationExportFilename(title: string): string {
     .slice(0, MAX_EXPORT_FILENAME_STEM)
     .replace(/[.\s-]+$/, '');
   if (!stem) return 'conversation.md';
-  if (WINDOWS_RESERVED_STEMS.test(stem)) return `conversation-${stem}.md`;
+  // Windows matches reserved names against the part before the first dot, so
+  // "CON.md" is just as rejected as "CON".
+  if (WINDOWS_RESERVED_STEMS.test(stem.split('.')[0])) return `conversation-${stem}.md`;
   return `${stem}.md`;
 }
 
