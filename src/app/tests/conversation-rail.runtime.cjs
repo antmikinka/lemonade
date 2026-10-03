@@ -55,6 +55,14 @@ assert.match(chatViewSource, /onDoubleClick=\{event => \{\s*event\.stopPropagati
   'double-clicking the title must start the rename without reselecting');
 assert.match(chatViewSource, /setRenamingId\(prev => \(prev === id \? null : prev\)\);/,
   'deleting a conversation mid-rename must clear the rename state');
+assert.match(chatViewSource, /const closeMobileSheet = useCallback\(\(\) => \{\s*setMobileSheetOpen\(false\);\s*setRenamingId\(null\);/,
+  'closing the mobile sheet must abandon an in-flight rename');
+assert.match(chatViewSource, /maxLength=\{120\}/,
+  'the rename field must surface the 120-char bound instead of truncating silently');
+assert.match(chatViewSource, /selectable=\{!isRenaming\}/,
+  'role="option" hides children from AT; the row must become a listitem while renaming');
+assert.match(chatViewSource, /idx === 0 && \(!activeId \|\| !visibleConversations\.some\(v => v\.id === activeId\)\)/,
+  'filtering out the active conversation must still leave the listbox keyboard-reachable');
 
 // ── Search filtering ───────────────────────────────────────────────────────
 
@@ -75,8 +83,8 @@ assert.match(chatViewSource, /No conversations match/,
   'a filtered-out rail must explain itself instead of rendering blank');
 assert.match(chatViewSource, /aria-label="Clear conversation search"/,
   'the clear button must be labelled');
-assert.match(chatViewSource, /if \(event\.key === 'Escape' && railQuery\) \{\s*event\.preventDefault\(\);\s*setRailQuery\(''\);\s*\}/,
-  'Escape in the search field must clear the query');
+assert.match(chatViewSource, /if \(event\.key === 'Escape' && railQuery\) \{\s*event\.preventDefault\(\);[\s\S]*?event\.stopPropagation\(\);\s*setRailQuery\(''\);\s*\}/,
+  'Escape in the search field must clear the query without closing the mobile sheet');
 
 // ── Styling contracts ──────────────────────────────────────────────────────
 
@@ -88,7 +96,7 @@ assert.match(stylesSource, /\.rail__rename-input \{[\s\S]*?font: inherit;/,
   'the rename field must inherit row typography so the title does not jump');
 assert.match(stylesSource, /\.rail__title-text \{[\s\S]*?text-overflow: ellipsis;/,
   'long titles must ellipsize in the rail');
-assert.match(stylesSource, /\.chat:not\(\.rail-expanded\) \.rail__list,\s*\.chat:not\(\.rail-expanded\) \.rail__search-wrap,/,
-  'the search field must hide with the rest of the collapsed rail');
+assert.match(stylesSource, /\.chat:not\(\.rail-expanded\) \.rail__list,\s*\.chat:not\(\.rail-expanded\) \.rail > \.rail__search-wrap,/,
+  'the search field must hide with the collapsed rail but stay available in the mobile sheet');
 
 console.log('Conversation rail rename/search contract checks passed.');
