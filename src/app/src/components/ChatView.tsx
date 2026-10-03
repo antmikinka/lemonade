@@ -51,6 +51,18 @@ import { LEMONADE_MCP_SERVER_ID, LEMONADE_MCP_TOOL_COUNT, MAX_MCP_SERVER_SELECTI
 import { isRouterModelInfo, preflightRouter, routerPreflightError } from '../features/router/routerRuntime';
 import { TTS_SETTINGS_EVENT, loadTtsPlaybackSettings, ttsVoiceFromRecipeOptions } from '../features/audio/ttsSettings';
 import {
+  AttachedFile,
+  DOCUMENT_INPUT_ACCEPT,
+  MAX_FILE_ATTACHMENTS,
+  MAX_FILE_SIZE_BYTES,
+  classifyFile,
+  composePromptWithFiles,
+  formatFileSize,
+  isDocumentAttachment,
+  isProbablyBinaryText,
+  languageForFilename,
+} from '../features/chatAttachments/fileAttachments';
+import {
   LEMONADE_DEFAULT_CHAT_MODELS,
   lemonadeDefaultModel,
   lemonadeDefaultModelInfo,
@@ -71,6 +83,7 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   images?: string[];  // transient base64 data URLs for user messages with images
+  files?: AttachedFile[]; // transient extracted text/PDF payloads for user messages
   generatedImages?: string[]; // transient generated image data URLs
   audioUrl?: string; // transient object URL for TTS output
   audioName?: string;
@@ -341,6 +354,7 @@ function saveConversations(convos: Conversation[], persist: boolean) {
       ...m,
       content: m.images?.length ? '[image prompt not persisted]' : m.content,
       images: undefined,
+      files: undefined,
       generatedImages: undefined,
       audioUrl: undefined,
       audioName: undefined,
@@ -406,10 +420,11 @@ function chatBlockingDownloadsKey(downloads: DownloadListItem[]): string {
     .join('|');
 }
 
-function titleFromInput(text: string, hasImages: boolean, audioFiles: File[] = []): string {
+function titleFromInput(text: string, hasImages: boolean, audioFiles: File[] = [], documentFiles: AttachedFile[] = []): string {
   const clean = text.trim();
   if (clean) return clean.slice(0, 50) + (clean.length > 50 ? '…' : '');
   if (audioFiles.length > 0) return `Audio: ${audioFiles[0].name}`.slice(0, 50);
+  if (documentFiles.length > 0) return `File: ${documentFiles[0].filename}`.slice(0, 50);
   if (hasImages) return 'Image conversation';
   return 'New conversation';
 }
@@ -920,6 +935,8 @@ const ChatView: React.FC<ChatViewProps> = ({
   const imageSettingsCommittedRef = useRef(false);
   const [pendingImages, setPendingImages] = useState<string[]>([]);
   const [pendingAudioFiles, setPendingAudioFiles] = useState<File[]>([]);
+  const [pendingFiles, setPendingFiles] = useState<AttachedFile[]>([]);
+  const [fileAttachmentError, setFileAttachmentError] = useState<string | null>(null);
   const [isLiveRecording, setIsLiveRecording] = useState(false);
   const [isLiveConnected, setIsLiveConnected] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -2668,6 +2685,7 @@ ${finalText}`
   ) => {
     const api = await getApiClient();
     const text = userMessage.content.trim();
+    const files = userMessage.files?.length ? [...userMessage.files] : undefined;
     const images = userMessage.images?.length ? [...userMessage.images] : undefined;
     const hasImages = !!images?.length;
     const collectionInfo = currentKnownModelInfo && isCollectionModel(currentKnownModelInfo) ? currentKnownModelInfo : null;
@@ -2677,7 +2695,7 @@ ${finalText}`
         ...c,
         messages: [...c.messages, userMessage],
         model: modelSnapshot,
-        title: c.messages.length === 0 && !c.customTitle ? titleFromInput(text, hasImages, audioFiles) : c.title,
+        title: c.messages.length === 0 && !c.customTitle ? titleFromInput(text, hasImages, audioFiles, files) : c.title,
         updatedAt: Date.now(),
       }));
       void speakWithPinnedTts(text, 'user');
@@ -2708,7 +2726,7 @@ ${finalText}`
     }
 
     let requestModelName = currentModel || modelSnapshot.name;
-    let requestText = text;
+    let requestText = files ? composePromptWithFiles(text, files) : text;
     let requestImages = images;
     let includeDirectAudioParts = canUseAudioInput && modeSupportsChatCompletions && audioFiles.length > 0;
 
@@ -2825,16 +2843,17 @@ ${finalText}`
     });
 
     chatMessages.push(...historyMessages.map(m => {
+      const text = m.files?.length ? composePromptWithFiles(m.content, m.files) : m.content;
       if (m.images?.length && supportsChatImageInput) {
         return {
           role: m.role,
           content: [
-            { type: 'text' as const, text: m.content },
+            { type: 'text' as const, text },
             ...m.images.map(url => ({ type: 'image_url' as const, image_url: { url } })),
           ],
         };
       }
-      return { role: m.role, content: m.content };
+      return { role: m.role, content: text };
     }));
 
     // Add the user message being sent or retried.
@@ -2883,6 +2902,7 @@ ${finalText}`
     const text = (overrideText ?? inputValue).trim();
     const audioFiles = [...pendingAudioFiles];
     const hasImages = pendingImages.length > 0;
+    const hasFiles = pendingFiles.length > 0;
     const canSubmitContent = currentCapability === 'audio' && !modeSupportsChatCompletions
       ? audioFiles.length > 0
       : currentCapability === 'image'
@@ -2893,7 +2913,7 @@ ${finalText}`
             ? (model3dSettings.sourceMode === 'image' ? hasImages : (!!text && !!model3dSettings.imageModel))
             : currentCapability === 'tts'
               ? (!!text && !openMossDescribeUnavailable && !openMossCloneUnavailable)
-              : (!!text || hasImages || (canUseAudioInput && audioFiles.length > 0));
+              : (!!text || hasImages || hasFiles || (canUseAudioInput && audioFiles.length > 0));
     if (!canSubmitContent || isBusy || !currentModelSnapshot) return;
 
     let convoId = activeId;
@@ -2903,6 +2923,7 @@ ${finalText}`
       role: 'user',
       content: text || (audioFiles[0] ? `Audio file: ${audioFiles[0].name}` : ''),
       images: hasImages ? [...pendingImages] : undefined,
+      files: hasFiles ? [...pendingFiles] : undefined,
       audioName: audioFiles[0]?.name,
       model: initialSnapshot,
     };
@@ -2910,7 +2931,7 @@ ${finalText}`
     if (!convoId) {
       const newConvo: Conversation = {
         id: generateId(),
-        title: titleFromInput(text, hasImages, audioFiles),
+        title: titleFromInput(text, hasImages, audioFiles, pendingFiles),
         model: initialSnapshot,
         messages: [userMessage],
         updatedAt: Date.now(),
@@ -2924,7 +2945,7 @@ ${finalText}`
         ...conversation,
         messages: [...conversation.messages, userMessage],
         model: initialSnapshot,
-        title: conversation.messages.length === 0 && !conversation.customTitle ? titleFromInput(text, hasImages, audioFiles) : conversation.title,
+        title: conversation.messages.length === 0 && !conversation.customTitle ? titleFromInput(text, hasImages, audioFiles, pendingFiles) : conversation.title,
         updatedAt: Date.now(),
       }));
     }
@@ -2932,6 +2953,8 @@ ${finalText}`
     setInputValue('');
     setPendingImages([]);
     setPendingAudioFiles([]);
+    setPendingFiles([]);
+    setFileAttachmentError(null);
     void speakWithPinnedTts(text, 'user');
 
     if (connectionStatus !== 'connected') {
@@ -3065,8 +3088,67 @@ ${finalText}`
     || (currentCapability === 'model3d' && model3dSettings.sourceMode === 'image');
   const acceptsAudioAttachments = canUseAudioInput
     || (isOpenMossTts && openMossSettings.mode === 'clone');
+  const acceptsFileAttachments = modeSupportsChatCompletions && currentCapability === 'chat';
 
   const addAttachments = useCallback(async (files: File[]) => {
+    if (acceptsFileAttachments) {
+      const documents = files.filter(isDocumentAttachment);
+      if (documents.length > 0) {
+        files = files.filter(f => !isDocumentAttachment(f));
+        const slots = MAX_FILE_ATTACHMENTS - pendingFiles.length;
+        const accepted: AttachedFile[] = [];
+        const problems: string[] = [];
+        for (const file of documents.slice(0, Math.max(0, slots))) {
+          if (file.size > MAX_FILE_SIZE_BYTES) {
+            problems.push(`${file.name} is larger than ${formatFileSize(MAX_FILE_SIZE_BYTES)}.`);
+            continue;
+          }
+          try {
+            if (classifyFile(file) === 'pdf') {
+              const { extractPdfText, MAX_PDF_PAGES } = await import(
+                /* webpackChunkName: "pdf-attachments" */ '../features/chatAttachments/pdfText'
+              );
+              const result = await extractPdfText(file);
+              if (!result.text) {
+                problems.push(`${file.name} has no extractable text (it may be a scanned document).`);
+                continue;
+              }
+              accepted.push({
+                filename: file.name,
+                language: 'text',
+                content: result.truncated
+                  ? `${result.text}\n\n[Extraction stopped at ${MAX_PDF_PAGES} of ${result.pages} pages.]`
+                  : result.text,
+                size: file.size,
+              });
+            } else {
+              const text = await file.text();
+              if (isProbablyBinaryText(text)) {
+                problems.push(`${file.name} looks like a binary file and was skipped.`);
+                continue;
+              }
+              accepted.push({
+                filename: file.name,
+                language: languageForFilename(file.name, file.type),
+                content: text,
+                size: file.size,
+              });
+            }
+          } catch (err) {
+            problems.push(`${file.name} could not be read: ${friendlyErrorMessage(err)}`);
+          }
+        }
+        if (documents.length > slots) {
+          problems.push(`Only ${MAX_FILE_ATTACHMENTS} files can be attached at once.`);
+        }
+        if (accepted.length > 0) {
+          setPendingFiles(prev => [...prev, ...accepted].slice(0, MAX_FILE_ATTACHMENTS));
+        }
+        setFileAttachmentError(problems.length > 0 ? problems.join(' ') : null);
+        if (files.length === 0) return;
+      }
+    }
+
     if (isOpenMossTts && openMossSettings.mode === 'clone') {
       const wav = files.find(file => file.type.toLowerCase().includes('wav') || file.name.toLowerCase().endsWith('.wav'));
       if (wav) setPendingAudioFiles([wav]);
@@ -3113,9 +3195,9 @@ ${finalText}`
     const encoded = await Promise.all(toProcess.map(imageToBase64));
     setPendingImages(prev => [...prev, ...encoded].slice(0, MAX_IMAGES));
   }, [
-    acceptsImageAttachments, canUseAudioInput, currentCapability, imageMode, isOpenMossTts,
-    modeSupportsChatCompletions, model3dSettings.sourceMode,
-    openMossSettings.mode, pendingImages.length,
+    acceptsFileAttachments, acceptsImageAttachments, canUseAudioInput, currentCapability,
+    imageMode, isOpenMossTts, modeSupportsChatCompletions, model3dSettings.sourceMode,
+    openMossSettings.mode, pendingFiles.length, pendingImages.length,
   ]);
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
@@ -3124,17 +3206,23 @@ ${finalText}`
     const files: File[] = [];
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
+      if (item.kind !== 'file') continue;
       if ((acceptsImageAttachments && item.type.startsWith('image/'))
         || (acceptsAudioAttachments && item.type.startsWith('audio/'))) {
         const file = item.getAsFile();
         if (file) files.push(file);
+        continue;
+      }
+      if (acceptsFileAttachments) {
+        const file = item.getAsFile();
+        if (file && isDocumentAttachment(file)) files.push(file);
       }
     }
     if (files.length > 0) {
       e.preventDefault();
       addAttachments(files);
     }
-  }, [acceptsAudioAttachments, acceptsImageAttachments, addAttachments]);
+  }, [acceptsAudioAttachments, acceptsFileAttachments, acceptsImageAttachments, addAttachments]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -3160,6 +3248,11 @@ ${finalText}`
 
   const removeAudio = useCallback(() => {
     setPendingAudioFiles([]);
+  }, []);
+
+  const removeFile = useCallback((index: number) => {
+    setPendingFiles(prev => prev.filter((_, i) => i !== index));
+    setFileAttachmentError(null);
   }, []);
 
   useEffect(() => {
@@ -3257,11 +3350,11 @@ ${finalText}`
 
   const hasMessages = messages.length > 0 || isStreaming || capabilityBusy || modelPreparation !== null;
   const isOpenMossCloneMode = isOpenMossTts && openMossSettings.mode === 'clone';
-  const canAttach = acceptsImageAttachments || acceptsAudioAttachments;
+  const canAttach = acceptsImageAttachments || acceptsAudioAttachments || acceptsFileAttachments;
   const imageAttachmentLimitReached = acceptsImageAttachments
     && !acceptsAudioAttachments
     && pendingImages.length >= MAX_IMAGES;
-  const fileAccept = isOpenMossCloneMode
+  const mediaAccept = isOpenMossCloneMode
     ? 'audio/wav,audio/x-wav,.wav'
     : currentCapability === 'model3d'
       ? 'image/png,image/jpeg,image/bmp,image/gif,.png,.jpg,.jpeg,.bmp,.gif'
@@ -3274,6 +3367,9 @@ ${finalText}`
             : acceptsAudioAttachments
               ? 'audio/*'
               : '';
+  const fileAccept = acceptsFileAttachments
+    ? [mediaAccept, DOCUMENT_INPUT_ACCEPT].filter(Boolean).join(',')
+    : mediaAccept;
   const canSubmit = !!currentModel && !isBusy && (currentCapability === 'audio' && !modeSupportsChatCompletions
     ? pendingAudioFiles.length > 0
     : currentCapability === 'image'
@@ -3284,7 +3380,7 @@ ${finalText}`
           ? (model3dSettings.sourceMode === 'image' ? pendingImages.length > 0 : (!!inputValue.trim() && !!model3dSettings.imageModel))
           : currentCapability === 'tts'
             ? (!!inputValue.trim() && !openMossDescribeUnavailable && !openMossCloneUnavailable)
-            : (!!inputValue.trim() || pendingImages.length > 0 || (canUseAudioInput && pendingAudioFiles.length > 0)));
+            : (!!inputValue.trim() || pendingImages.length > 0 || pendingFiles.length > 0 || (canUseAudioInput && pendingAudioFiles.length > 0)));
   const composerPlaceholder = !currentModel
     ? 'Draft a message. Connect and load a model to send…'
     : currentIsOmniCollection
@@ -4303,6 +4399,19 @@ ${finalText}`
             ))}
           </div>
         )}
+        {pendingFiles.length > 0 && (
+          <div className="composer__files" role="list" aria-label="Document attachments">
+            {pendingFiles.map((file, i) => (
+              <div key={`${file.filename}-${i}`} className="composer__file-chip" role="listitem" title={`${file.language} · ${formatFileSize(file.size)}`}>
+                <span><Icon name={file.filename.toLowerCase().endsWith('.pdf') ? 'file' : 'code'} size={13} /> {file.filename}</span>
+                <button onClick={() => removeFile(i)} aria-label={`Remove ${file.filename}`}>×</button>
+              </div>
+            ))}
+          </div>
+        )}
+        {fileAttachmentError && (
+          <p className="composer__file-error" role="status">{fileAttachmentError}</p>
+        )}
         {(isLiveRecording || liveTranscript || liveError || micError) && (supportsRealtimeAudio || currentCapability === 'audio') && (
           <div className={`composer__live${liveError || micError ? ' composer__live--error' : ''}`}>
             <div className="composer__live-head">
@@ -4354,13 +4463,17 @@ ${finalText}`
                       ? 'WAV audio file'
                       : currentCapability === 'model3d'
                         ? 'PNG, JPEG, BMP, or GIF image'
-                        : acceptsImageAttachments && acceptsAudioAttachments
-                          ? 'Images and audio files'
-                          : acceptsImageAttachments
-                            ? 'Images'
-                            : acceptsAudioAttachments
-                              ? 'Audio files'
-                              : 'Not available for this model'}</small>
+                        : acceptsFileAttachments && (acceptsImageAttachments || acceptsAudioAttachments)
+                          ? 'Images, audio, text, and PDF files'
+                          : acceptsFileAttachments
+                            ? 'Text, code, and PDF files'
+                            : acceptsImageAttachments && acceptsAudioAttachments
+                              ? 'Images and audio files'
+                              : acceptsImageAttachments
+                                ? 'Images'
+                                : acceptsAudioAttachments
+                                  ? 'Audio files'
+                                  : 'Not available for this model'}</small>
                   </span>
                 </button>
                 <button
@@ -4949,6 +5062,11 @@ const MessageBubble: React.FC<{ message: Message; activeModel: ModelSnapshot | n
           {message.audioName && (
             <div className="message__file-chip"><Icon name="mic" size={13} /> {message.audioName}</div>
           )}
+          {message.files?.map((file, i) => (
+            <div key={`${file.filename}-${i}`} className="message__file-chip" title={`${file.language} · ${formatFileSize(file.size)}`}>
+              <Icon name={file.filename.toLowerCase().endsWith('.pdf') ? 'file' : 'code'} size={13} /> {file.filename}
+            </div>
+          ))}
           {isEditing ? (
             <div className="message__edit">
               <textarea

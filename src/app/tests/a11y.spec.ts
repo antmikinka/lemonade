@@ -3079,8 +3079,18 @@ test.describe('Chat toolbar accessibility', () => {
       .locator('.composer__add-row')
       .filter({ hasText: 'Add files' });
     await expect(addFilesEntry.locator('strong')).toHaveText('Add files');
-    await expect(addFilesEntry.locator('small')).toHaveText('Images and audio files');
+    await expect(addFilesEntry.locator('small')).toHaveText('Images, audio, text, and PDF files');
     await expect(addFilesEntry).not.toContainText(/Upload images|Add photos & files/i);
+  });
+
+  test('A187a2 — Add files advertises document support on plain chat models', async ({ page }) => {
+    await goToChatWithLoadedModel(page);
+    await page.getByRole('button', { name: /Add files, photos, or tools/i }).click();
+
+    const addFilesEntry = page.getByRole('menu', { name: 'Add to chat' })
+      .locator('.composer__add-row')
+      .filter({ hasText: 'Add files' });
+    await expect(addFilesEntry.locator('small')).toHaveText('Text, code, and PDF files');
   });
 
   test('A187b — external MCP remains selectable inside the unified tools flow', async ({ page }) => {
