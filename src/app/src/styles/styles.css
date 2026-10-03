@@ -614,6 +614,75 @@ input[type="checkbox"]:disabled {
   width: 100%;
 }
 
+.rail__search-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 var(--space-3) var(--space-1);
+  padding: var(--space-1-5) var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  color: var(--text-tertiary);
+}
+
+.rail__search-wrap:focus-within {
+  border-color: var(--accent-fg);
+}
+
+.rail__search {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+}
+
+.rail__search:focus {
+  outline: none;
+}
+
+.rail__search-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.rail__search-clear:hover {
+  color: var(--text-primary);
+  background: var(--surface-2);
+}
+
+.bottom-sheet__search {
+  margin: 0 var(--space-3) var(--space-2);
+}
+
+.rail__title-text {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail__rename-input {
+  width: 100%;
+  min-width: 0;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--accent-fg);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--text-primary);
+  font: inherit;
+}
+
 .detail-configuration__autotune {
   display: inline-flex;
   align-items: center;
@@ -5359,6 +5428,7 @@ optgroup {
 
 /* Surgical prototype UI fixes: collapsed rail, copy/retry actions, high-context controls */
 .chat:not(.rail-expanded) .rail__list,
+.chat:not(.rail-expanded) .rail__search-wrap,
 .chat:not(.rail-expanded) .rail__privacy {
   display: none;
 }

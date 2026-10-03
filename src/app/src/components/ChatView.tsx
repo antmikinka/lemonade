@@ -86,6 +86,8 @@ interface Message {
 interface Conversation {
   id: string;
   title: string;
+  /** Set once the user renames the conversation; auto-titling must not overwrite it. */
+  customTitle?: boolean;
   model: ModelSnapshot | null;
   messages: Message[];
   updatedAt: number;
@@ -302,6 +304,7 @@ function normalizeConversation(raw: unknown): Conversation | null {
   return {
     id,
     title: typeof obj.title === 'string' && obj.title.trim() ? obj.title : deriveTitle(messages),
+    customTitle: obj.customTitle === true ? true : undefined,
     model: normalizeSnapshot(obj.model),
     messages,
     updatedAt: typeof obj.updatedAt === 'number' ? obj.updatedAt : Date.now(),
@@ -901,6 +904,9 @@ const ChatView: React.FC<ChatViewProps> = ({
   const [historyHydrated, setHistoryHydrated] = useState(() => !loadPersistencePreference());
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const [railQuery, setRailQuery] = useState('');
   const [inputValue, setInputValue] = useState('');
   const [imageMode, setImageMode] = useState<ImageMode>('generate');
   const [imageSettings, setImageSettings] = useState<ImageGenerationSettings>(DEFAULT_IMAGE_SETTINGS);
@@ -2178,7 +2184,42 @@ const ChatView: React.FC<ChatViewProps> = ({
     delete streamModelsRef.current[id];
     setConversations(prev => prev.filter(c => c.id !== id));
     if (activeId === id) setActiveId(null);
+    setRenamingId(prev => (prev === id ? null : prev));
   }, [activeId, streaming.stop]);
+
+  const startRenameConversation = useCallback((id: string, currentTitle: string) => {
+    setRenameDraft(currentTitle);
+    setRenamingId(id);
+  }, []);
+
+  const cancelRenameConversation = useCallback(() => {
+    setRenamingId(null);
+    setRenameDraft('');
+  }, []);
+
+  const commitRenameConversation = useCallback(() => {
+    const id = renamingId;
+    if (!id) return;
+    const nextTitle = renameDraft.trim().slice(0, 120);
+    setRenamingId(null);
+    setRenameDraft('');
+    if (!nextTitle) return;
+    setConversations(prev => prev.map(c => (
+      c.id === id && c.title !== nextTitle
+        ? { ...c, title: nextTitle, customTitle: true }
+        : c
+    )));
+  }, [renamingId, renameDraft]);
+
+  const visibleConversations = useMemo(() => {
+    const q = railQuery.trim().toLowerCase();
+    if (!q) return conversations;
+    return conversations.filter(c => {
+      const title = (c.title || deriveTitle(c.messages)).toLowerCase();
+      const model = (c.model?.name || '').toLowerCase();
+      return title.includes(q) || model.includes(q);
+    });
+  }, [conversations, railQuery]);
 
 
   const handleRailToggle = useCallback(() => {
@@ -2634,7 +2675,7 @@ ${finalText}`
         ...c,
         messages: [...c.messages, userMessage],
         model: modelSnapshot,
-        title: c.messages.length === 0 ? titleFromInput(text, hasImages, audioFiles) : c.title,
+        title: c.messages.length === 0 && !c.customTitle ? titleFromInput(text, hasImages, audioFiles) : c.title,
         updatedAt: Date.now(),
       }));
       void speakWithPinnedTts(text, 'user');
@@ -2881,7 +2922,7 @@ ${finalText}`
         ...conversation,
         messages: [...conversation.messages, userMessage],
         model: initialSnapshot,
-        title: conversation.messages.length === 0 ? titleFromInput(text, hasImages, audioFiles) : conversation.title,
+        title: conversation.messages.length === 0 && !conversation.customTitle ? titleFromInput(text, hasImages, audioFiles) : conversation.title,
         updatedAt: Date.now(),
       }));
     }
@@ -2997,7 +3038,7 @@ ${finalText}`
       ...c,
       messages: [...priorMessages, editedUserMessage],
       model: currentModelSnapshot,
-      title: messageIndex === 0 ? titleFromInput(text, !!editedUserMessage.images?.length) : c.title,
+      title: messageIndex === 0 && !c.customTitle ? titleFromInput(text, !!editedUserMessage.images?.length) : c.title,
       updatedAt: Date.now(),
     } : c));
 
@@ -3364,6 +3405,44 @@ ${finalText}`
     const isStreaming = streaming.streamingConvoIds.has(c.id);
     const lastMessage = c.messages[c.messages.length - 1];
     const failed = !isStreaming && Boolean(lastMessage?.isError);
+    const isRenaming = renamingId === c.id;
+
+    const titleNode = isRenaming ? (
+      <input
+        className="rail__rename-input"
+        value={renameDraft}
+        autoFocus
+        aria-label={`Rename conversation: ${convTitle}`}
+        onClick={event => event.stopPropagation()}
+        onDoubleClick={event => event.stopPropagation()}
+        onChange={event => setRenameDraft(event.target.value)}
+        onFocus={event => event.target.select()}
+        onBlur={commitRenameConversation}
+        onKeyDown={event => {
+          // The listbox owns arrow/Enter navigation; the rename field must not
+          // feed its keystrokes back into row selection.
+          event.stopPropagation();
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            commitRenameConversation();
+          } else if (event.key === 'Escape') {
+            event.preventDefault();
+            cancelRenameConversation();
+          }
+        }}
+      />
+    ) : (
+      <span
+        className="rail__title-text"
+        title="Double-click to rename"
+        onDoubleClick={event => {
+          event.stopPropagation();
+          startRenameConversation(c.id, convTitle);
+        }}
+      >
+        {convTitle}
+      </span>
+    );
 
     return (
       <WorkspaceListRow
@@ -3371,7 +3450,7 @@ ${finalText}`
         id={`${idPrefix}-conv-${c.id}`}
         rowId={c.id}
         capability={identityFor(capability, c.model?.recipe)}
-        title={convTitle}
+        title={titleNode}
         meta={c.model?.name || undefined}
         anchor={timeAgo(c.updatedAt)}
         status={isStreaming ? 'live' : failed ? 'error' : undefined}
@@ -3380,7 +3459,15 @@ ${finalText}`
         selected={isSelected}
         tabIndex={isTabTarget ? 0 : -1}
         ariaLabel={`${convTitle}${c.model?.name ? `, ${c.model.name}` : ''}${isStreaming ? ', generating' : failed ? ', last reply failed' : ''}, ${timeAgo(c.updatedAt)}`}
+        ariaKeyShortcuts="F2"
         onClick={onSelect}
+        onKeyDown={event => {
+          if (event.key === 'F2') {
+            event.preventDefault();
+            event.stopPropagation();
+            startRenameConversation(c.id, convTitle);
+          }
+        }}
         action={{
           icon: 'trash',
           label: `Delete conversation: ${convTitle}`,
@@ -3415,13 +3502,46 @@ ${finalText}`
           </button>
         </div>
 
+        {conversations.length > 0 && (
+          <div className="rail__search-wrap">
+            <Icon name="search" size={13} aria-hidden="true" />
+            <input
+              type="text"
+              className="rail__search"
+              placeholder="Search conversations"
+              aria-label="Search conversations"
+              value={railQuery}
+              onChange={event => setRailQuery(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Escape' && railQuery) {
+                  event.preventDefault();
+                  setRailQuery('');
+                }
+              }}
+            />
+            {railQuery && (
+              <button
+                type="button"
+                className="rail__search-clear"
+                onClick={() => setRailQuery('')}
+                aria-label="Clear conversation search"
+              >
+                <Icon name="x" size={12} aria-hidden="true" />
+              </button>
+            )}
+          </div>
+        )}
+
         <WorkspaceList className="rail__list" label="Conversations" wrap onRowActivate={handleSelectConversation}>
-          {conversations.map((c, idx) => renderConversationRow(
+          {visibleConversations.map((c, idx) => renderConversationRow(
             c, idx, 'rail', () => handleSelectConversation(c.id),
           ))}
         </WorkspaceList>
         {conversations.length === 0 && (
           <p className="rail__empty">No conversations yet</p>
+        )}
+        {conversations.length > 0 && visibleConversations.length === 0 && (
+          <p className="rail__empty" role="status">No conversations match “{railQuery.trim()}”</p>
         )}
 
       </aside>
@@ -3467,6 +3587,36 @@ ${finalText}`
           <span className="workspace-action-button__label">New chat</span>
         </button>
 
+        {conversations.length > 0 && (
+          <div className="rail__search-wrap bottom-sheet__search">
+            <Icon name="search" size={13} aria-hidden="true" />
+            <input
+              type="text"
+              className="rail__search"
+              placeholder="Search conversations"
+              aria-label="Search conversations"
+              value={railQuery}
+              onChange={event => setRailQuery(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Escape' && railQuery) {
+                  event.preventDefault();
+                  setRailQuery('');
+                }
+              }}
+            />
+            {railQuery && (
+              <button
+                type="button"
+                className="rail__search-clear"
+                onClick={() => setRailQuery('')}
+                aria-label="Clear conversation search"
+              >
+                <Icon name="x" size={12} aria-hidden="true" />
+              </button>
+            )}
+          </div>
+        )}
+
         <WorkspaceList
           className="bottom-sheet__list rail__list"
           label="Conversations"
@@ -3476,7 +3626,7 @@ ${finalText}`
             closeMobileSheet();
           }}
         >
-          {conversations.map((c, idx) =>
+          {visibleConversations.map((c, idx) =>
             renderConversationRow(
               c,
               idx,
@@ -3491,6 +3641,9 @@ ${finalText}`
 
         {conversations.length === 0 && (
           <p className="rail__empty">No conversations yet</p>
+        )}
+        {conversations.length > 0 && visibleConversations.length === 0 && (
+          <p className="rail__empty" role="status">No conversations match “{railQuery.trim()}”</p>
         )}
       </div>
 
