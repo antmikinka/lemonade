@@ -24,6 +24,14 @@ runs:
         VERSION=$(git describe --tags --always)
         # Strip leading 'v' for Debian version compatibility
         DEB_VERSION=$(echo "${VERSION}" | sed 's/^v//')
+        # dpkg requires versions to start with a digit, but --always falls back
+        # to a bare commit hash in clones without reachable tags, and hashes can
+        # start with a-f. Prefix the fallback so packaging never depends on the
+        # leading hex digit of whatever commit is being built.
+        case "${DEB_VERSION}" in
+          [0-9]*) ;;
+          *) DEB_VERSION="0.0.0-g${DEB_VERSION}" ;;
+        esac
         echo "version=${DEB_VERSION}" >> $GITHUB_OUTPUT
 
     - name: Create Debian packaging metadata
