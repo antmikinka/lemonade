@@ -541,6 +541,10 @@ interface WorkspaceListRowProps {
   /** 0–100. Draws the hairline along the row's bottom edge. */
   progress?: number;
   action?: WorkspaceListRowAction;
+  /** Additional hover actions stacked to the left of `action`. Always rendered
+      as buttons — a row whose commands are all pointer-only should keep using
+      the single `action` slot. */
+  extraActions?: WorkspaceListRowAction[];
   selected?: boolean;
   /** Match the owning list: `false` renders a plain list item. */
   selectable?: boolean;
@@ -572,6 +576,7 @@ export const WorkspaceListRow: React.FC<WorkspaceListRowProps> = ({
   statusLabel,
   progress,
   action,
+  extraActions,
   selected = false,
   selectable = true,
   disabled = false,
@@ -666,6 +671,23 @@ export const WorkspaceListRow: React.FC<WorkspaceListRowProps> = ({
           )}
         </span>
       )}
+
+      {/* Extras stack leftward from the primary action; DOM order matches the
+          visual order so ArrowRight/Tab walk the commands left to right. */}
+      {extraActions?.map((extra, index) => (
+        <button
+          key={extra.label}
+          type="button"
+          className={`workspace-list-row__action workspace-list-row__action--extra${extra.active ? ' workspace-list-row__action--active' : ''}`}
+          style={{ insetInlineEnd: `calc(var(--workspace-list-row-action) * ${extraActions.length - index})` }}
+          onClick={event => { event.stopPropagation(); extra.onClick(); }}
+          aria-label={extra.label}
+          title={extra.label}
+          tabIndex={selectable ? -1 : 0}
+        >
+          <Icon name={extra.icon} size={16} aria-hidden="true" />
+        </button>
+      ))}
 
       {action && (action.pointerOnly ? (
         // A listbox option cannot legally contain another interactive control.
