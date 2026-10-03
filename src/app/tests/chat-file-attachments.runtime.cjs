@@ -30,8 +30,12 @@ assert.match(fileAttachmentsSource, /export const MAX_FILE_ATTACHMENTS = 4;/,
   'the number of concurrent document attachments must be capped');
 assert.match(fileAttachmentsSource, /sample\.includes\('\\u0000'\) \|\| sample\.includes\('\\ufffd'\)/,
   'binary sniffing must reject NUL bytes and replacement characters');
-assert.match(fileAttachmentsSource, /return `Attached file: \$\{file\.filename\}\\n\\`\\`\\`\$\{file\.language\}\\n\$\{file\.content\}\\n\\`\\`\\``;/,
-  'wrapFileForPrompt must fence file content with its language');
+assert.match(fileAttachmentsSource, /return '`'\.repeat\(Math\.max\(3, longest \+ 1\)\);/,
+  'the fence must outgrow any backtick run inside the content or markdown files would escape it');
+assert.match(fileAttachmentsSource, /const fence = fenceFor\(file\.content\);\s*return `Attached file: \$\{file\.filename\}\\n\$\{fence\}\$\{file\.language\}\\n\$\{file\.content\}\\n\$\{fence\}`;/,
+  'wrapFileForPrompt must fence file content with its language using the dynamic fence');
+assert.match(fileAttachmentsSource, /new TextDecoder\('utf-16le'\)/,
+  'UTF-16 text files must decode instead of being rejected as binary');
 assert.match(fileAttachmentsSource, /export function composePromptWithFiles\(text: string, files: AttachedFile\[\]\): string \{\s*return \[text\.trim\(\), \.\.\.files\.map\(wrapFileForPrompt\)\]\.filter\(Boolean\)\.join\('\\n\\n'\);/,
   'files must fold into plain prompt text so every chat backend accepts them');
 assert.match(fileAttachmentsSource, /export const DOCUMENT_INPUT_ACCEPT = `\$\{FILE_INPUT_ACCEPT\},application\/pdf,\.pdf`;/,
@@ -47,6 +51,8 @@ assert.match(pdfTextSource, /export const MAX_PDF_PAGES = 50;/,
   'PDF extraction must cap page count so huge documents cannot stall the composer');
 assert.match(pdfTextSource, /await doc\.destroy\(\);/,
   'extracted documents must release their worker resources');
+assert.match(pdfTextSource, /pdfjsPromise = null;\s*throw err;/,
+  'a failed pdfjs chunk fetch must not poison later attempts');
 assert.ok(packageJson.dependencies['pdfjs-dist'], 'pdfjs-dist must be a runtime dependency of the app');
 
 // ── Message model and persistence ──────────────────────────────────────────
@@ -81,10 +87,31 @@ assert.match(chatViewSource, /setPendingFiles\(prev => \[\.\.\.prev, \.\.\.accep
   'accepted documents must append up to the cap');
 assert.match(chatViewSource, /if \(acceptsFileAttachments\) \{\s*const file = item\.getAsFile\(\);\s*if \(file && isDocumentAttachment\(file\)\) files\.push\(file\);/,
   'pasting documents from the OS clipboard must attach them');
-assert.match(chatViewSource, /files = files\.filter\(f => !isDocumentAttachment\(f\)\);/,
+assert.match(chatViewSource, /files = files\.filter\(f => !isDocumentAttachment\(f\) && classifyFile\(f\) !== 'unsupported'\);/,
   'a mixed drop must keep routing its images/audio after documents are extracted');
 assert.match(chatViewSource, /if \(files\.length === 0\) return;\s*\}\s*\}\s*\n\s*if \(isOpenMossTts/,
   'document-only drops must stop before the media routing branches');
+assert.match(chatViewSource, /const text = decodeTextFile\(new Uint8Array\(await file\.arrayBuffer\(\)\)\);/,
+  'text decoding must go through the BOM-sniffing helper');
+assert.match(chatViewSource, /unsupported file type/,
+  'unsupported drops must explain themselves instead of vanishing');
+
+// ── Capability-switch and in-flight guards ─────────────────────────────────
+
+assert.match(chatViewSource, /if \(currentCapability !== 'chat'\) \{\s*setPendingFiles\(\[\]\);\s*setFileAttachmentError\(null\);\s*\}/,
+  'switching away from chat must clear document chips so they are never attached-but-not-sent');
+assert.match(chatViewSource, /const hasFiles = pendingFiles\.length > 0 && acceptsFileAttachments;/,
+  'handleSend must not smuggle stale documents into non-chat send paths');
+assert.match(chatViewSource, /if \(!canSubmitContent \|\| isBusy \|\| isAttaching \|\| !currentModelSnapshot\) return;/,
+  'sending mid-extraction must be blocked so the attachment cannot reappear after send');
+assert.match(chatViewSource, /setIsAttaching\(true\);\s*try \{/,
+  'extraction must flag itself in flight');
+assert.match(chatViewSource, /\} finally \{\s*setIsAttaching\(false\);\s*\}/,
+  'the in-flight flag must clear even when extraction throws');
+assert.match(chatViewSource, /&& !acceptsFileAttachments\s*&& pendingImages\.length >= MAX_IMAGES;/,
+  'a full image budget must not block document attachments');
+assert.match(chatViewSource, /\? 'Images, text, and PDF files'/,
+  'vision-only chat models must not be advertised as accepting audio');
 
 // ── Request composition ────────────────────────────────────────────────────
 

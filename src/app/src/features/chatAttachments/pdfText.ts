@@ -19,6 +19,10 @@ function loadPdfjs(): Promise<typeof import('pdfjs-dist')> {
         import.meta.url,
       ).toString();
       return pdfjs;
+    }).catch(err => {
+      // A failed chunk fetch must not poison later attempts until page reload.
+      pdfjsPromise = null;
+      throw err;
     });
   }
   return pdfjsPromise;
