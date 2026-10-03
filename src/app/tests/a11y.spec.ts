@@ -1123,27 +1123,58 @@ test.describe('Accessibility — conversation rail listbox', () => {
     expect(focusedId).toBe('rail-conv-rc2');
   });
 
-  test('A66 — delete button accessible name includes the conversation title', async ({ page }) => {
-    const deleteBtn = page.locator('.rail__list .workspace-list-row__action').first();
-    const label = await deleteBtn.getAttribute('aria-label');
-    expect(label).toBeTruthy();
-    expect(label!.toLowerCase()).toContain('delete');
-    expect(label).toContain('Alpha conversation');
+  test('A66 — every row action accessible name includes the conversation title', async ({ page }) => {
+    const actions = page.locator('#rail-conv-rc1 .workspace-list-row__action');
+    await expect(actions).toHaveCount(3);
+
+    const labels = await actions.evaluateAll(nodes =>
+      nodes.map(n => n.getAttribute('aria-label') ?? ''),
+    );
+    const joined = labels.join('|').toLowerCase();
+    expect(joined).toContain('copy conversation as markdown');
+    expect(joined).toContain('download conversation as markdown');
+    expect(joined).toContain('delete');
+    for (const label of labels) {
+      expect(label).toContain('Alpha conversation');
+    }
   });
 
-  test('A67 — ArrowRight reaches the row action and ArrowLeft returns to the row', async ({ page }) => {
+  test('A67 — ArrowRight walks the full action stack and ArrowLeft returns to the row', async ({ page }) => {
     await page.locator('#rail-conv-rc1').focus();
-    await page.keyboard.press('ArrowRight');
 
-    const action = await page.evaluate(() => {
+    const activeAction = () => page.evaluate(() => {
       const active = document.activeElement as HTMLElement | null;
       return {
         isAction: active?.classList.contains('workspace-list-row__action') ?? false,
-        label: active?.getAttribute('aria-label') ?? '',
+        label: (active?.getAttribute('aria-label') ?? '').toLowerCase(),
       };
     });
+
+    await page.keyboard.press('ArrowRight');
+    let action = await activeAction();
     expect(action.isAction).toBe(true);
-    expect(action.label.toLowerCase()).toContain('delete');
+    expect(action.label).toContain('copy conversation as markdown');
+
+    await page.keyboard.press('ArrowRight');
+    action = await activeAction();
+    expect(action.label).toContain('download conversation as markdown');
+
+    await page.keyboard.press('ArrowRight');
+    action = await activeAction();
+    expect(action.label).toContain('delete');
+
+    // Past the last action, ArrowRight must hold instead of wrapping or escaping.
+    await page.keyboard.press('ArrowRight');
+    action = await activeAction();
+    expect(action.label).toContain('delete');
+
+    await page.keyboard.press('ArrowLeft');
+    action = await activeAction();
+    expect(action.label).toContain('download conversation as markdown');
+
+    await page.keyboard.press('ArrowLeft');
+    action = await activeAction();
+    expect(action.label).toContain('copy conversation as markdown');
 
     await page.keyboard.press('ArrowLeft');
     const backOnRow = await page.evaluate(

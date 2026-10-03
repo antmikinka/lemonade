@@ -504,12 +504,14 @@ function buildConversationExport(c: Conversation): ExportableConversation {
   return {
     title: c.title || deriveTitle(c.messages),
     modelName: c.model?.name || null,
-    updatedAt: c.updatedAt,
     messages: c.messages.map(m => ({
       role: m.role,
       // Folded exactly like history replay so the export matches what the model saw.
       content: m.files?.length ? composePromptWithFiles(m.content, m.files) : m.content,
       isError: m.isError,
+      // Mid-conversation model switches keep their own attribution; otherwise
+      // the serializer falls back to the conversation's model name.
+      modelName: m.model?.name || null,
     })),
   };
 }

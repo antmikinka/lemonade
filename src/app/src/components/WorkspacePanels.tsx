@@ -433,22 +433,32 @@ export const WorkspaceList: React.FC<WorkspaceListProps> = ({
       case 'Home': next = 0; break;
       case 'End': next = last; break;
       case 'ArrowRight': {
-        /* A row's action is a distinct command — delete this conversation, cancel
-           this download — and an option may not own a second tab stop, so Tab
-           alone can never reach it. ArrowRight steps into it and ArrowLeft steps
-           back out, which also keeps ArrowUp/Down working from the button since
-           `current` matches on containment. */
+        /* A row's actions are distinct commands — copy, export, delete this
+           conversation, cancel this download — and an option may not own a
+           second tab stop, so Tab alone can never reach them. ArrowRight steps
+           into the action stack and then walks right through it; ArrowLeft
+           walks back out to the row. ArrowUp/Down keep working from any button
+           since `current` matches on containment. */
         if (current < 0) return;
-        const action = options[current].querySelector<HTMLElement>('button.workspace-list-row__action');
-        if (!action) return;
+        const actions = Array.from(
+          options[current].querySelectorAll<HTMLElement>('button.workspace-list-row__action'),
+        );
+        if (!actions.length) return;
+        const focused = actions.indexOf(document.activeElement as HTMLElement);
+        if (focused === actions.length - 1) return;
         event.preventDefault();
-        action.focus();
+        actions[focused + 1].focus();
         return;
       }
       case 'ArrowLeft': {
         if (current < 0 || document.activeElement === options[current]) return;
+        const actions = Array.from(
+          options[current].querySelectorAll<HTMLElement>('button.workspace-list-row__action'),
+        );
+        const focused = actions.indexOf(document.activeElement as HTMLElement);
         event.preventDefault();
-        options[current].focus();
+        if (focused > 0) actions[focused - 1].focus();
+        else options[current].focus();
         return;
       }
       case 'Enter':
@@ -645,6 +655,9 @@ export const WorkspaceListRow: React.FC<WorkspaceListRowProps> = ({
       aria-keyshortcuts={ariaKeyShortcuts}
       tabIndex={tabIndex}
       className={`workspace-list-row${selected ? ' workspace-list-row--selected' : ''}${disabled ? ' workspace-list-row--disabled' : ''}${action?.pointerOnly ? ' workspace-list-row--pointer-action' : ''}${className ? ` ${className}` : ''}`}
+      style={extraActions?.length
+        ? ({ '--workspace-list-row-action-span': `calc(var(--workspace-list-row-action) * ${extraActions.length + 1})` } as React.CSSProperties)
+        : undefined}
       onClick={disabled ? undefined : onClick}
       onKeyDown={onKeyDown}
       onFocus={onFocus}
@@ -673,7 +686,7 @@ export const WorkspaceListRow: React.FC<WorkspaceListRowProps> = ({
       )}
 
       {/* Extras stack leftward from the primary action; DOM order matches the
-          visual order so ArrowRight/Tab walk the commands left to right. */}
+          visual order so the ArrowRight/ArrowLeft walk runs left to right. */}
       {extraActions?.map((extra, index) => (
         <button
           key={extra.label}
@@ -684,6 +697,7 @@ export const WorkspaceListRow: React.FC<WorkspaceListRowProps> = ({
           aria-label={extra.label}
           title={extra.label}
           tabIndex={selectable ? -1 : 0}
+          aria-keyshortcuts={selectable && index === 0 ? 'ArrowRight' : undefined}
         >
           <Icon name={extra.icon} size={16} aria-hidden="true" />
         </button>
@@ -712,7 +726,7 @@ export const WorkspaceListRow: React.FC<WorkspaceListRowProps> = ({
           // stop. Inside a listbox the option owns the only tab stop, so the button
           // is reached with ArrowRight instead (see WorkspaceList's key handler).
           tabIndex={selectable ? -1 : 0}
-          aria-keyshortcuts={selectable ? 'ArrowRight' : undefined}
+          aria-keyshortcuts={selectable && !extraActions?.length ? 'ArrowRight' : undefined}
         >
           <Icon name={action.icon} size={16} aria-hidden="true" />
         </button>

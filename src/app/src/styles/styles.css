@@ -3423,7 +3423,8 @@ optgroup {
 }
 
 .backends__toast,
-.manager__toast {
+.manager__toast,
+.chat__toast {
   position: fixed;
   bottom: var(--space-6);
   left: 50%;
@@ -3486,22 +3487,7 @@ optgroup {
 }
 
 .chat__toast {
-  position: fixed;
-  bottom: var(--space-6);
-  left: 50%;
-  transform: translateX(-50%);
   max-width: min(480px, calc(100vw - var(--space-8)));
-  padding: var(--space-3) var(--space-5);
-  border-radius: var(--radius-pill);
-  background: var(--surface-glass);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid var(--border-strong);
-  box-shadow: var(--shadow-lg);
-  font-size: var(--text-sm);
-  color: var(--text-primary);
-  z-index: 100;
-  animation: toast-in var(--duration-base) var(--ease-out);
 }
 
 .chat__toast--error {
@@ -14546,7 +14532,9 @@ a.backend-card__version:focus-visible {
 .workspace-list-row__title {
   grid-column: 2;
   grid-row: 1;
-  padding-inline-end: var(--workspace-list-row-action);
+  /* Rows with stacked extra actions widen the reservation via the inline
+     --workspace-list-row-action-span custom property. */
+  padding-inline-end: var(--workspace-list-row-action-span, var(--workspace-list-row-action));
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
   line-height: var(--leading-snug);
