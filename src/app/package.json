@@ -21,6 +21,7 @@
     "test:model-providers": "node tests/model-provider-search.runtime.cjs",
     "test:chat-audio": "node tests/chat-audio-capability.runtime.cjs",
     "test:conversation-rail": "node tests/conversation-rail.runtime.cjs",
+    "test:chat-file-attachments": "node tests/chat-file-attachments.runtime.cjs && node tests/chat-file-attachments.unit.mjs",
     "test:model-kinds": "node tests/model-kind-classification.runtime.cjs",
     "test:mcp-mock": "node tests/mock-mcp-server.runtime.cjs",
     "test:mcp-runtime": "node tests/mcp-runtime.runtime.cjs",
@@ -71,6 +72,7 @@
     "markdown-it": "^14.1.0",
     "markdown-it-texmath": "^1.0.0",
     "mermaid": "^11.15.0",
+    "pdfjs-dist": "^4.10.38",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "recharts": "^3.8.1"
