@@ -55,6 +55,23 @@ assert.match(pdfTextSource, /pdfjsPromise = null;\s*throw err;/,
   'a failed pdfjs chunk fetch must not poison later attempts');
 assert.ok(packageJson.dependencies['pdfjs-dist'], 'pdfjs-dist must be a runtime dependency of the app');
 
+// ── Web-app packaging (npm ci + Debian system-modules builds) ──────────────
+
+const webAppRoot = path.join(root, '..', 'web-app');
+const webAppWebpackSource = fs.readFileSync(path.join(webAppRoot, 'webpack.config.js'), 'utf8');
+const webAppLock = JSON.parse(fs.readFileSync(path.join(webAppRoot, 'package-lock.json'), 'utf8'));
+
+assert.ok(webAppLock.packages['node_modules/pdfjs-dist'],
+  'the web-app lockfile must carry pdfjs-dist or npm ci fails in packaging builds');
+assert.match(webAppWebpackSource, /'pdfjs-dist\$': path\.resolve\(__dirname, 'system-stubs\/pdfjs-dist\.ts'\)/,
+  'system-modules builds must stub pdfjs-dist — Debian ships no v4 worker');
+assert.match(webAppWebpackSource, /'pdfjs-dist\/build\/pdf\.worker\.min\.mjs\$': path\.resolve\(__dirname, 'system-stubs\/pdfjs-worker-stub\.mjs'\)/,
+  'the pdf worker URL must also resolve to a stub in system-modules builds');
+assert.ok(fs.existsSync(path.join(webAppRoot, 'system-stubs', 'pdfjs-dist.ts')),
+  'the pdfjs-dist system stub must exist');
+assert.ok(fs.existsSync(path.join(webAppRoot, 'system-stubs', 'pdfjs-worker-stub.mjs')),
+  'the pdf worker stub asset must exist');
+
 // ── Message model and persistence ──────────────────────────────────────────
 
 assert.match(chatViewSource, /interface Message \{[\s\S]*?files\?: AttachedFile\[\];[\s\S]*?\}/,

@@ -97,6 +97,10 @@ module.exports = (env, argv) => {
     'mermaid$': path.resolve(__dirname, 'system-stubs/mermaid.ts'),
     'recharts$': path.resolve(__dirname, 'system-stubs/recharts.tsx'),
     'highlight.js/styles/github-dark.css$': path.resolve(__dirname, 'system-stubs/highlight-github-dark.css'),
+    // Distro repositories do not package a pdfjs-dist new enough for the v4
+    // worker layout, so PDF extraction degrades gracefully in system builds.
+    'pdfjs-dist$': path.resolve(__dirname, 'system-stubs/pdfjs-dist.ts'),
+    'pdfjs-dist/build/pdf.worker.min.mjs$': path.resolve(__dirname, 'system-stubs/pdfjs-worker-stub.mjs'),
   } : {};
 
   let bufferPolyfill = false;
