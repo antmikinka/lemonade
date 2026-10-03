@@ -3423,7 +3423,8 @@ optgroup {
 }
 
 .backends__toast,
-.manager__toast {
+.manager__toast,
+.chat__toast {
   position: fixed;
   bottom: var(--space-6);
   left: 50%;
@@ -3483,6 +3484,15 @@ optgroup {
 @keyframes toast-in {
   from { opacity: 0; transform: translateX(-50%) translateY(8px); }
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.chat__toast {
+  max-width: min(480px, calc(100vw - var(--space-8)));
+}
+
+.chat__toast--error {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
 }
 
 /* Banner */
@@ -14522,7 +14532,9 @@ a.backend-card__version:focus-visible {
 .workspace-list-row__title {
   grid-column: 2;
   grid-row: 1;
-  padding-inline-end: var(--workspace-list-row-action);
+  /* Rows with stacked extra actions widen the reservation via the inline
+     --workspace-list-row-action-span custom property. */
+  padding-inline-end: var(--workspace-list-row-action-span, var(--workspace-list-row-action));
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
   line-height: var(--leading-snug);
@@ -14670,6 +14682,12 @@ a.backend-card__version:focus-visible {
 .workspace-list-row__action:hover {
   color: var(--text-primary);
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+/* Extras sit inboard of the row edge instead of flush against it, so all four
+   corners round rather than just the trailing pair. */
+.workspace-list-row__action--extra {
+  border-radius: var(--radius-md);
 }
 
 /* Active state may be transient; only `latched` also controls visibility. */

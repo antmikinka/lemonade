@@ -44,6 +44,12 @@ import {
   modelStructure,
 } from '../modelCapabilities';
 import { storageKey } from '../storage';
+import {
+  conversationExportFilename,
+  conversationToMarkdown,
+  downloadMarkdownFile,
+  type ExportableConversation,
+} from '../features/chatHistory/conversationExport';
 import { CHAT_HISTORY_PREFERENCE_EVENT, loadChatHistoryPreference } from '../features/chatHistory/historySettings';
 import type { DownloadListItem } from '../features/downloadManager/downloadStore';
 import { findModelInfoByName, getAudioTranscriptionComponent, getPrimaryChatComponent, getVisionChatComponent, isCollectionModel, virtualLoadedCollection } from '../features/collections/collectionModels';
@@ -494,6 +500,22 @@ function isPersistableAssistantMessage(m: Message): boolean {
   return !(m.isError || /^Error:/i.test(m.content));
 }
 
+function buildConversationExport(c: Conversation): ExportableConversation {
+  return {
+    title: c.title || deriveTitle(c.messages),
+    modelName: c.model?.name || null,
+    messages: c.messages.map(m => ({
+      role: m.role,
+      // Folded exactly like history replay so the export matches what the model saw.
+      content: m.files?.length ? composePromptWithFiles(m.content, m.files) : m.content,
+      isError: m.isError,
+      // Mid-conversation model switches keep their own attribution; otherwise
+      // the serializer falls back to the conversation's model name.
+      modelName: m.model?.name || null,
+    })),
+  };
+}
+
 
 function formatDurationMs(ms: number | null | undefined): string | null {
   if (!Number.isFinite(Number(ms)) || Number(ms) <= 0) return null;
@@ -923,6 +945,8 @@ const ChatView: React.FC<ChatViewProps> = ({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const [railQuery, setRailQuery] = useState('');
+  const [exportNotice, setExportNotice] = useState<{ message: string; error: boolean } | null>(null);
+  const exportNoticeTimerRef = useRef<number | null>(null);
   const [inputValue, setInputValue] = useState('');
   const [imageMode, setImageMode] = useState<ImageMode>('generate');
   const [imageSettings, setImageSettings] = useState<ImageGenerationSettings>(DEFAULT_IMAGE_SETTINGS);
@@ -2239,6 +2263,40 @@ const ChatView: React.FC<ChatViewProps> = ({
         : c
     )));
   }, [renamingId, renameDraft]);
+
+  const showExportNotice = useCallback((message: string, error = false) => {
+    setExportNotice({ message, error });
+    if (exportNoticeTimerRef.current !== null) window.clearTimeout(exportNoticeTimerRef.current);
+    exportNoticeTimerRef.current = window.setTimeout(() => {
+      exportNoticeTimerRef.current = null;
+      setExportNotice(null);
+    }, 3000);
+  }, []);
+
+  useEffect(() => () => {
+    if (exportNoticeTimerRef.current !== null) window.clearTimeout(exportNoticeTimerRef.current);
+  }, []);
+
+  const handleCopyConversationMarkdown = useCallback(async (c: Conversation) => {
+    const exportData = buildConversationExport(c);
+    try {
+      await copyTextToClipboard(conversationToMarkdown(exportData));
+      showExportNotice(`Copied “${exportData.title}” as Markdown`);
+    } catch {
+      showExportNotice('Could not copy the conversation to the clipboard', true);
+    }
+  }, [showExportNotice]);
+
+  const handleDownloadConversationMarkdown = useCallback((c: Conversation) => {
+    const exportData = buildConversationExport(c);
+    try {
+      const filename = conversationExportFilename(exportData.title);
+      downloadMarkdownFile(conversationToMarkdown(exportData), filename);
+      showExportNotice(`Downloaded ${filename}`);
+    } catch {
+      showExportNotice('Could not download the conversation', true);
+    }
+  }, [showExportNotice]);
 
   const visibleConversations = useMemo(() => {
     const q = railQuery.trim().toLowerCase();
@@ -3593,6 +3651,18 @@ ${finalText}`
             startRenameConversation(c.id, convTitle);
           }
         }}
+        extraActions={[
+          {
+            icon: 'copy',
+            label: `Copy conversation as Markdown: ${convTitle}`,
+            onClick: () => { void handleCopyConversationMarkdown(c); },
+          },
+          {
+            icon: 'download',
+            label: `Download conversation as Markdown: ${convTitle}`,
+            onClick: () => handleDownloadConversationMarkdown(c),
+          },
+        ]}
         action={{
           icon: 'trash',
           label: `Delete conversation: ${convTitle}`,
@@ -4745,6 +4815,15 @@ ${finalText}`
         <div className="composer__hint">{composerHint}</div>
       </div>
       </div>
+      {exportNotice && (
+        <div
+          className={`chat__toast${exportNotice.error ? ' chat__toast--error' : ''}`}
+          role="status"
+          aria-live="polite"
+        >
+          {exportNotice.message}
+        </div>
+      )}
       <div aria-live="assertive" aria-atomic="true" className="sr-only">
         {streamStatus}
       </div>
