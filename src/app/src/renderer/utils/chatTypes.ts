@@ -18,7 +18,21 @@ export interface AudioContent {
   };
 }
 
-export type MessageContent = string | Array<TextContent | ImageContent | AudioContent>;
+export interface UploadedFile {
+  filename: string;
+  content: string;
+  language: string;
+  sizeBytes: number;
+}
+
+// UI-only content part. Converted to a fenced text block before the request
+// leaves the renderer (see convertContentForRequest), so backends never see it.
+export interface FileContent {
+  type: 'file';
+  file: UploadedFile;
+}
+
+export type MessageContent = string | Array<TextContent | ImageContent | AudioContent | FileContent>;
 
 export interface Message {
   role: 'user' | 'assistant';

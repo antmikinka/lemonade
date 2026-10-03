@@ -11,13 +11,24 @@ import { useSystem } from '../../hooks/useSystem';
 import { Modality } from '../../hooks/useInferenceState';
 import { ModelsData } from '../../utils/modelData';
 import { useTTS } from '../../hooks/useTTS';
-import { Message, MessageContent, TextContent, ImageContent, AudioContent, UploadedAudio, Artifact } from '../../utils/chatTypes';
+import { Message, MessageContent, TextContent, ImageContent, AudioContent, FileContent, UploadedAudio, UploadedFile, Artifact } from '../../utils/chatTypes';
+import {
+  classifyFile,
+  convertContentForRequest,
+  FILE_INPUT_ACCEPT,
+  formatFileSize,
+  isProbablyBinaryText,
+  languageForFilename,
+  MAX_FILE_SIZE_BYTES,
+  wrapFileForPrompt,
+} from '../../utils/fileAttachments';
 import { adjustTextareaHeight } from '../../utils/textareaUtils';
-import { SendIcon, ImageUploadIcon, AudioUploadIcon, RefreshIcon, EjectIcon } from '../Icons';
+import { SendIcon, ImageUploadIcon, AudioUploadIcon, FileUploadIcon, RefreshIcon, EjectIcon } from '../Icons';
 import InferenceControls from '../InferenceControls';
 import ModelSelector from '../ModelSelector';
 import ImagePreviewList from '../ImagePreviewList';
 import AudioPreviewList from '../AudioPreviewList';
+import FilePreviewList from '../FilePreviewList';
 import EmptyState from '../EmptyState';
 import ImageLightbox from '../ImageLightbox';
 import StreamingAudio from '../StreamingAudio';
@@ -179,6 +190,9 @@ const LLMChatPanel: React.FC<LLMChatPanelProps> = ({
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [editingAudio, setEditingAudio] = useState<UploadedAudio[]>([]);
   const [uploadedAudio, setUploadedAudio] = useState<UploadedAudio[]>([]);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [editingFiles, setEditingFiles] = useState<UploadedFile[]>([]);
+  const [isDragOver, setIsDragOver] = useState(false);
   const [showAudioMenu, setShowAudioMenu] = useState(false);
   const [showEditAudioMenu, setShowEditAudioMenu] = useState(false);
   const [isRecordingAudio, setIsRecordingAudio] = useState(false);
@@ -198,6 +212,9 @@ const LLMChatPanel: React.FC<LLMChatPanelProps> = ({
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
   const editAudioInputRef = useRef<HTMLInputElement>(null);
+  const fileAttachInputRef = useRef<HTMLInputElement>(null);
+  const editFileAttachInputRef = useRef<HTMLInputElement>(null);
+  const dragCounterRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const autoScrollInProgressRef = useRef(false);
@@ -343,6 +360,132 @@ const LLMChatPanel: React.FC<LLMChatPanelProps> = ({
 
   const uploadedAudioHandlers = createAudioHandlers(setUploadedAudio);
   const editingAudioHandlers = createAudioHandlers(setEditingAudio);
+
+  // Single ingestion path for every dropped/picked/pasted file. Auto-detects
+  // the kind and routes it: images/audio reuse the existing attachment state,
+  // plaintext/code becomes a `file` content part wrapped into the prompt.
+  const ingestFiles = (fileList: FileList | File[], target: 'composer' | 'edit') => {
+    const addFiles = target === 'composer' ? setUploadedFiles : setEditingFiles;
+    const addImages = target === 'composer' ? setUploadedImages : setEditingImages;
+    const addAudio = target === 'composer' ? setUploadedAudio : setEditingAudio;
+
+    Array.from(fileList).forEach((file) => {
+      const kind = classifyFile(file);
+
+      if (kind === 'image') {
+        if (!isVision) {
+          showError(`Image attachments require a vision-capable model (rejected ${file.name})`);
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const result = e.target?.result;
+          if (typeof result === 'string') addImages(prev => [...prev, result]);
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+
+      if (kind === 'audio') {
+        if (!isAudioChat && !collectionMode) {
+          showError(`Audio attachments are not supported by the current model (rejected ${file.name})`);
+          return;
+        }
+        const format = resolveAudioFormat(file);
+        const playbackUrl = URL.createObjectURL(file);
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const result = e.target?.result;
+          if (typeof result !== 'string') return;
+          const { base64 } = splitDataUrl(result);
+          addAudio(prev => [...prev, { dataUrl: playbackUrl, base64, format, filename: file.name }]);
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+
+      if (kind === 'unsupported') {
+        showError(`Unsupported file type: ${file.name}. Attach plaintext, code, images, or audio.`);
+        return;
+      }
+
+      if (file.size > MAX_FILE_SIZE_BYTES) {
+        showError(`${file.name} is too large (${formatFileSize(file.size)}). Maximum is ${formatFileSize(MAX_FILE_SIZE_BYTES)}.`);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = typeof e.target?.result === 'string' ? e.target.result : '';
+        if (isProbablyBinaryText(text)) {
+          showError(`Could not read ${file.name} as plaintext.`);
+          return;
+        }
+        addFiles(prev => [...prev, {
+          filename: file.name,
+          content: text,
+          language: languageForFilename(file.name, file.type),
+          sizeBytes: file.size,
+        }]);
+      };
+      reader.onerror = () => showError(`Failed to read ${file.name}.`);
+      reader.readAsText(file);
+    });
+  };
+
+  const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>, target: 'composer' | 'edit') => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+    ingestFiles(files, target);
+    event.target.value = '';
+  };
+
+  // Paste: OS-copied files arrive via clipboardData.files; fall back to the
+  // existing image-paste handling for screenshots.
+  const createPasteHandler = (imagePaste: (event: React.ClipboardEvent) => void, target: 'composer' | 'edit') => (
+    event: React.ClipboardEvent,
+  ) => {
+    if (event.clipboardData.files.length > 0) {
+      event.preventDefault();
+      ingestFiles(event.clipboardData.files, target);
+      return;
+    }
+    imagePaste(event);
+  };
+
+  const composerPasteHandler = createPasteHandler(uploadedImageHandlers.paste, 'composer');
+  const editPasteHandler = createPasteHandler(editingImageHandlers.paste, 'edit');
+
+  const hasFilesDragType = (event: React.DragEvent) => Array.from(event.dataTransfer.types || []).includes('Files');
+
+  const handleDragEnter = (event: React.DragEvent) => {
+    if (!hasFilesDragType(event)) return;
+    event.preventDefault();
+    dragCounterRef.current += 1;
+    setIsDragOver(true);
+  };
+
+  const handleDragOver = (event: React.DragEvent) => {
+    if (!hasFilesDragType(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleDragLeave = (event: React.DragEvent) => {
+    if (!hasFilesDragType(event)) return;
+    dragCounterRef.current = Math.max(0, dragCounterRef.current - 1);
+    if (dragCounterRef.current === 0) setIsDragOver(false);
+  };
+
+  const handleDrop = (event: React.DragEvent) => {
+    if (!hasFilesDragType(event)) return;
+    event.preventDefault();
+    dragCounterRef.current = 0;
+    setIsDragOver(false);
+    if (event.dataTransfer.files && event.dataTransfer.files.length > 0) {
+      ingestFiles(event.dataTransfer.files, 'composer');
+    }
+  };
 
   // Mic-record-to-input_audio: accumulate PCM chunks from useAudioCapture,
   // then pack them into a WAV on stop and add as an UploadedAudio entry.
@@ -499,8 +642,9 @@ const LLMChatPanel: React.FC<LLMChatPanelProps> = ({
   const buildChatRequestBody = (messageHistory: Message[]) => ({
     model: chatModelName,
     // Strip UI-only fields (e.g. `thinking`) so strict providers like
-    // Fireworks don't 400 on unknown keys in the assistant turn.
-    messages: messageHistory.map(({ role, content }) => ({ role, content })),
+    // Fireworks don't 400 on unknown keys in the assistant turn. `file` parts
+    // are UI-only too — they become fenced text blocks here.
+    messages: messageHistory.map(({ role, content }) => ({ role, content: convertContentForRequest(content) })),
     stream: true,
     ...buildChatRequestOverrides(appSettings),
   });
@@ -573,6 +717,10 @@ const LLMChatPanel: React.FC<LLMChatPanelProps> = ({
           } else {
             newContent.push({ type: 'text', text: '[Generated image]' });
           }
+        } else if (item.type === 'file' && 'file' in item) {
+          // Unlike images/audio, text files are useful to the LLM inline, so
+          // they stay in the conversation as fenced text.
+          newContent.push({ type: 'text', text: wrapFileForPrompt(item.file) });
         } else {
           newContent.push(item);
         }
@@ -925,7 +1073,7 @@ const LLMChatPanel: React.FC<LLMChatPanelProps> = ({
     const textToSend = typeof textOverride === 'string' ? textOverride : inputValue;
     // When called from voice auto-submit, `isBusy` may still be stale-true
     // because the state update hasn't flushed yet.
-    if (!textToSend.trim() && uploadedImages.length === 0 && uploadedAudio.length === 0) return;
+    if (!textToSend.trim() && uploadedImages.length === 0 && uploadedAudio.length === 0 && uploadedFiles.length === 0) return;
 
     const ready = await runPreFlight('llm', {
       modelName: chatModelName,
@@ -943,9 +1091,12 @@ const LLMChatPanel: React.FC<LLMChatPanelProps> = ({
     collectionAutoScrollDisabledRef.current = false;
 
     let messageContent: MessageContent;
-    if (uploadedImages.length > 0 || uploadedAudio.length > 0) {
-      const contentArray: Array<TextContent | ImageContent | AudioContent> = [];
+    if (uploadedImages.length > 0 || uploadedAudio.length > 0 || uploadedFiles.length > 0) {
+      const contentArray: Array<TextContent | ImageContent | AudioContent | FileContent> = [];
       if (textToSend.trim()) contentArray.push({ type: 'text', text: textToSend });
+      uploadedFiles.forEach(file => {
+        contentArray.push({ type: 'file', file });
+      });
       uploadedImages.forEach(imageUrl => {
         contentArray.push({ type: 'image_url', image_url: { url: imageUrl } });
       });
@@ -967,6 +1118,7 @@ const LLMChatPanel: React.FC<LLMChatPanelProps> = ({
     setInputValue('');
     setUploadedImages([]);
     setUploadedAudio([]);
+    setUploadedFiles([]);
     setMessages(prev => [...prev, { role: 'assistant', content: '', thinking: '' }]);
 
     try {
@@ -1003,7 +1155,7 @@ const LLMChatPanel: React.FC<LLMChatPanelProps> = ({
   };
 
   const submitEdit = async () => {
-    if ((!editingValue.trim() && editingImages.length === 0 && editingAudio.length === 0) || editingIndex === null || isBusy) return;
+    if ((!editingValue.trim() && editingImages.length === 0 && editingAudio.length === 0 && editingFiles.length === 0) || editingIndex === null || isBusy) return;
 
     const ready = await runPreFlight('llm', {
       modelName: chatModelName,
@@ -1021,9 +1173,12 @@ const LLMChatPanel: React.FC<LLMChatPanelProps> = ({
     const truncatedMessages = messages.slice(0, editingIndex);
 
     let messageContent: MessageContent;
-    if (editingImages.length > 0 || editingAudio.length > 0) {
-      const contentArray: Array<TextContent | ImageContent | AudioContent> = [];
+    if (editingImages.length > 0 || editingAudio.length > 0 || editingFiles.length > 0) {
+      const contentArray: Array<TextContent | ImageContent | AudioContent | FileContent> = [];
       if (editingValue.trim()) contentArray.push({ type: 'text', text: editingValue });
+      editingFiles.forEach(file => {
+        contentArray.push({ type: 'file', file });
+      });
       editingImages.forEach(imageUrl => {
         contentArray.push({ type: 'image_url', image_url: { url: imageUrl } });
       });
@@ -1046,6 +1201,7 @@ const LLMChatPanel: React.FC<LLMChatPanelProps> = ({
     setEditingValue('');
     setEditingImages([]);
     setEditingAudio([]);
+    setEditingFiles([]);
     setMessages(prev => [...prev, { role: 'assistant', content: '', thinking: '' }]);
 
     try {
@@ -1183,6 +1339,9 @@ const LLMChatPanel: React.FC<LLMChatPanelProps> = ({
               }
               return <MessageAudio key={index} data={item.input_audio.data} format={fmt} />;
             }
+            if (item.type === 'file') {
+              return <FilePreviewList key={index} files={[item.file]} className="message-file-preview" />;
+            }
             return null;
           })}
         </div>
@@ -1200,6 +1359,7 @@ const LLMChatPanel: React.FC<LLMChatPanelProps> = ({
         setEditingValue(message.content);
         setEditingImages([]);
         setEditingAudio([]);
+        setEditingFiles([]);
       } else {
         const textContent = message.content.find((item): item is TextContent => item.type === 'text');
         setEditingValue(textContent ? textContent.text : '');
@@ -1215,6 +1375,8 @@ const LLMChatPanel: React.FC<LLMChatPanelProps> = ({
             filename: `audio-${i + 1}.${fmt}`,
           };
         }));
+        const fileContents = message.content.filter((item): item is FileContent => item.type === 'file');
+        setEditingFiles(fileContents.map(fc => fc.file));
       }
     }
   };
@@ -1230,6 +1392,7 @@ const LLMChatPanel: React.FC<LLMChatPanelProps> = ({
     setEditingValue('');
     setEditingImages([]);
     setEditingAudio([]);
+    setEditingFiles([]);
   };
 
   const handleEditContainerClick = (e: React.MouseEvent) => {
@@ -1266,7 +1429,19 @@ const LLMChatPanel: React.FC<LLMChatPanelProps> = ({
   };
 
   return (
-    <div className="llm-chat-panel">
+    <div
+      className={`llm-chat-panel ${isDragOver ? 'drag-over' : ''}`}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {isDragOver && (
+        <div className="chat-drop-overlay">
+          <FileUploadIcon />
+          <span>Drop files to attach</span>
+        </div>
+      )}
       <div className="chat-header">
         <h3>LLM Chat</h3>
         <div className="chat-header-actions">
@@ -1325,6 +1500,11 @@ const LLMChatPanel: React.FC<LLMChatPanelProps> = ({
                     onRemove={editingAudioHandlers.remove}
                     className="edit-audio-preview-container"
                   />
+                  <FilePreviewList
+                    files={editingFiles}
+                    onRemove={(index) => setEditingFiles(prev => prev.filter((_, i) => i !== index))}
+                    className="edit-file-preview-container"
+                  />
                   <div className="edit-message-content">
                     <textarea
                       ref={editTextareaRef}
@@ -1332,11 +1512,26 @@ const LLMChatPanel: React.FC<LLMChatPanelProps> = ({
                       value={editingValue}
                       onChange={handleEditInputChange}
                       onKeyDown={handleEditKeyPress}
-                      onPaste={editingImageHandlers.paste}
+                      onPaste={editPasteHandler}
                       autoFocus
                       rows={1}
                     />
                     <div className="edit-message-controls">
+                      <input
+                        ref={editFileAttachInputRef}
+                        type="file"
+                        accept={FILE_INPUT_ACCEPT}
+                        multiple
+                        onChange={(e) => handleFileInputChange(e, 'edit')}
+                        style={{ display: 'none' }}
+                      />
+                      <button
+                        className="file-upload-button"
+                        onClick={() => editFileAttachInputRef.current?.click()}
+                        title="Attach files"
+                      >
+                        <FileUploadIcon />
+                      </button>
                       {isVision && (
                         <>
                           <input
@@ -1396,7 +1591,7 @@ const LLMChatPanel: React.FC<LLMChatPanelProps> = ({
                       <button
                         className="edit-send-button"
                         onClick={submitEdit}
-                        disabled={!editingValue.trim() && editingImages.length === 0 && editingAudio.length === 0}
+                        disabled={!editingValue.trim() && editingImages.length === 0 && editingAudio.length === 0 && editingFiles.length === 0}
                         title="Send edited message"
                       >
                         <SendIcon />
@@ -1438,13 +1633,17 @@ const LLMChatPanel: React.FC<LLMChatPanelProps> = ({
             audio={uploadedAudio}
             onRemove={uploadedAudioHandlers.remove}
           />
+          <FilePreviewList
+            files={uploadedFiles}
+            onRemove={(index) => setUploadedFiles(prev => prev.filter((_, i) => i !== index))}
+          />
           <textarea
             ref={inputTextareaRef}
             className="chat-input"
             value={inputValue}
             onChange={handleInputChange}
             onKeyPress={handleKeyPress}
-            onPaste={uploadedImageHandlers.paste}
+            onPaste={composerPasteHandler}
             placeholder="Type your message..."
             rows={1}
           />
@@ -1454,7 +1653,7 @@ const LLMChatPanel: React.FC<LLMChatPanelProps> = ({
             stoppable={activeModality === 'llm'}
             onSend={sendMessage}
             onStop={handleStopGeneration}
-            sendDisabled={!inputValue.trim() && uploadedImages.length === 0 && uploadedAudio.length === 0}
+            sendDisabled={!inputValue.trim() && uploadedImages.length === 0 && uploadedAudio.length === 0 && uploadedFiles.length === 0}
             modelSelector={<ModelSelector disabled={isBusy} />}
             rightControls={
               <RecordButton
@@ -1469,6 +1668,22 @@ const LLMChatPanel: React.FC<LLMChatPanelProps> = ({
             }
             leftControls={
               <>
+                <input
+                  ref={fileAttachInputRef}
+                  type="file"
+                  accept={FILE_INPUT_ACCEPT}
+                  multiple
+                  onChange={(e) => handleFileInputChange(e, 'composer')}
+                  style={{ display: 'none' }}
+                />
+                <button
+                  className="file-upload-button"
+                  onClick={() => fileAttachInputRef.current?.click()}
+                  disabled={isBusy}
+                  title="Attach files"
+                >
+                  <FileUploadIcon />
+                </button>
                 {isVision && (
                   <>
                     <input

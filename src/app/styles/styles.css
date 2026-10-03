@@ -3615,6 +3615,7 @@ input::-webkit-calendar-picker-indicator {
     flex-direction: column;
     flex: 1;
     min-height: 0;
+    position: relative;
 }
 
 .chat-input {
@@ -4130,6 +4131,139 @@ input::-webkit-calendar-picker-indicator {
     max-width: 320px;
     margin: 8px 0;
     display: block;
+}
+
+/* File attachments — mirrors .audio-upload-button */
+.file-upload-button {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    min-height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.file-upload-button:hover:not(:disabled) {
+    color: var(--text-primary);
+    background: var(--bg-alpha-1);
+}
+
+.file-upload-button:active:not(:disabled) {
+    transform: scale(0.95);
+}
+
+.file-upload-button:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.file-preview-container,
+.edit-file-preview-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-bottom: 8px;
+}
+
+.message-file-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.file-preview-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    border-radius: 8px;
+    padding: 4px 8px;
+    max-width: 260px;
+}
+
+.file-preview-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    color: var(--text-secondary);
+}
+
+.file-preview-name {
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.file-preview-meta {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+}
+
+.file-preview-lang {
+    font-size: 10px;
+    line-height: 1.4;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--bg-alpha-1);
+    border: 1px solid var(--border-primary);
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    flex-shrink: 0;
+}
+
+.file-remove-button {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--bg-secondary-alpha-7);
+    color: var(--text-primary);
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.file-remove-button:hover {
+    background: rgba(255, 0, 0, 0.8);
+    transform: scale(1.1);
+}
+
+/* Drag-and-drop overlay for the chat panel */
+.chat-drop-overlay {
+    position: absolute;
+    inset: 8px;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    border: 2px dashed var(--border-primary);
+    border-radius: 12px;
+    background: var(--bg-secondary-alpha-7);
+    color: var(--text-primary);
+    font-size: 14px;
+    pointer-events: none;
 }
 
 /* Audio dropdown menu (Upload file / Record audio) */
