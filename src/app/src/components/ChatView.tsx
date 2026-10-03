@@ -57,6 +57,7 @@ import {
   MAX_FILE_SIZE_BYTES,
   classifyFile,
   composePromptWithFiles,
+  decodeTextFile,
   formatFileSize,
   isDocumentAttachment,
   isProbablyBinaryText,
@@ -935,6 +936,7 @@ const ChatView: React.FC<ChatViewProps> = ({
   const [pendingAudioFiles, setPendingAudioFiles] = useState<File[]>([]);
   const [pendingFiles, setPendingFiles] = useState<AttachedFile[]>([]);
   const [fileAttachmentError, setFileAttachmentError] = useState<string | null>(null);
+  const [isAttaching, setIsAttaching] = useState(false);
   const [isLiveRecording, setIsLiveRecording] = useState(false);
   const [isLiveConnected, setIsLiveConnected] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -1478,6 +1480,16 @@ const ChatView: React.FC<ChatViewProps> = ({
       || (currentCapability === 'model3d' && model3dSettings.sourceMode === 'image');
     if (!keepsImageAttachments) setPendingImages([]);
   }, [currentCapability, imageMode, model3dSettings.sourceMode, supportsChatImageInput]);
+
+  useEffect(() => {
+    // Document attachments are chat-completions only (acceptsFileAttachments);
+    // switching to image/audio/model3d/TTS must not carry stale chips into a
+    // composer whose send path would silently ignore them.
+    if (currentCapability !== 'chat') {
+      setPendingFiles([]);
+      setFileAttachmentError(null);
+    }
+  }, [currentCapability]);
 
   const capabilityForLoaded = useCallback((model: LoadedModel) => {
     const customInfo = customModelInfos.find(m => (m.name || m.id) === model.model_name);
@@ -2900,7 +2912,7 @@ ${finalText}`
     const text = (overrideText ?? inputValue).trim();
     const audioFiles = [...pendingAudioFiles];
     const hasImages = pendingImages.length > 0;
-    const hasFiles = pendingFiles.length > 0;
+    const hasFiles = pendingFiles.length > 0 && acceptsFileAttachments;
     const canSubmitContent = currentCapability === 'audio' && !modeSupportsChatCompletions
       ? audioFiles.length > 0
       : currentCapability === 'image'
@@ -2912,7 +2924,7 @@ ${finalText}`
             : currentCapability === 'tts'
               ? (!!text && !openMossDescribeUnavailable && !openMossCloneUnavailable)
               : (!!text || hasImages || hasFiles || (canUseAudioInput && audioFiles.length > 0));
-    if (!canSubmitContent || isBusy || !currentModelSnapshot) return;
+    if (!canSubmitContent || isBusy || isAttaching || !currentModelSnapshot) return;
 
     let convoId = activeId;
     const initialSnapshot = currentModelSnapshot;
@@ -3091,53 +3103,62 @@ ${finalText}`
   const addAttachments = useCallback(async (files: File[]) => {
     if (acceptsFileAttachments) {
       const documents = files.filter(isDocumentAttachment);
-      if (documents.length > 0) {
-        files = files.filter(f => !isDocumentAttachment(f));
+      const unsupported = files.filter(f => classifyFile(f) === 'unsupported');
+      if (documents.length > 0 || unsupported.length > 0) {
+        files = files.filter(f => !isDocumentAttachment(f) && classifyFile(f) !== 'unsupported');
         const slots = MAX_FILE_ATTACHMENTS - pendingFiles.length;
         const accepted: AttachedFile[] = [];
         const problems: string[] = [];
-        for (const file of documents.slice(0, Math.max(0, slots))) {
-          if (file.size > MAX_FILE_SIZE_BYTES) {
-            problems.push(`${file.name} is larger than ${formatFileSize(MAX_FILE_SIZE_BYTES)}.`);
-            continue;
-          }
-          try {
-            if (classifyFile(file) === 'pdf') {
-              const { extractPdfText, MAX_PDF_PAGES } = await import(
-                /* webpackChunkName: "pdf-attachments" */ '../features/chatAttachments/pdfText'
-              );
-              const result = await extractPdfText(file);
-              if (!result.text) {
-                problems.push(`${file.name} has no extractable text (it may be a scanned document).`);
-                continue;
-              }
-              accepted.push({
-                filename: file.name,
-                language: 'text',
-                content: result.truncated
-                  ? `${result.text}\n\n[Extraction stopped at ${MAX_PDF_PAGES} of ${result.pages} pages.]`
-                  : result.text,
-                size: file.size,
-              });
-            } else {
-              const text = await file.text();
-              if (isProbablyBinaryText(text)) {
-                problems.push(`${file.name} looks like a binary file and was skipped.`);
-                continue;
-              }
-              accepted.push({
-                filename: file.name,
-                language: languageForFilename(file.name, file.type),
-                content: text,
-                size: file.size,
-              });
+        setIsAttaching(true);
+        try {
+          for (const file of documents.slice(0, Math.max(0, slots))) {
+            if (file.size > MAX_FILE_SIZE_BYTES) {
+              problems.push(`${file.name} is larger than ${formatFileSize(MAX_FILE_SIZE_BYTES)}.`);
+              continue;
             }
-          } catch (err) {
-            problems.push(`${file.name} could not be read: ${friendlyErrorMessage(err)}`);
+            try {
+              if (classifyFile(file) === 'pdf') {
+                const { extractPdfText, MAX_PDF_PAGES } = await import(
+                  /* webpackChunkName: "pdf-attachments" */ '../features/chatAttachments/pdfText'
+                );
+                const result = await extractPdfText(file);
+                if (!result.text) {
+                  problems.push(`${file.name} has no extractable text (it may be a scanned document).`);
+                  continue;
+                }
+                accepted.push({
+                  filename: file.name,
+                  language: 'text',
+                  content: result.truncated
+                    ? `${result.text}\n\n[Extraction stopped at ${MAX_PDF_PAGES} of ${result.pages} pages.]`
+                    : result.text,
+                  size: file.size,
+                });
+              } else {
+                const text = decodeTextFile(new Uint8Array(await file.arrayBuffer()));
+                if (isProbablyBinaryText(text)) {
+                  problems.push(`${file.name} looks like a binary file and was skipped.`);
+                  continue;
+                }
+                accepted.push({
+                  filename: file.name,
+                  language: languageForFilename(file.name, file.type),
+                  content: text,
+                  size: file.size,
+                });
+              }
+            } catch (err) {
+              problems.push(`${file.name} could not be read: ${friendlyErrorMessage(err)}`);
+            }
           }
+        } finally {
+          setIsAttaching(false);
         }
         if (documents.length > slots) {
-          problems.push(`Only ${MAX_FILE_ATTACHMENTS} files can be attached at once.`);
+          problems.push(`${documents.length - Math.max(0, slots)} file(s) skipped — at most ${MAX_FILE_ATTACHMENTS} can be attached at once.`);
+        }
+        if (unsupported.length > 0) {
+          problems.push(`${unsupported.map(f => f.name).join(', ')}: unsupported file type.`);
         }
         if (accepted.length > 0) {
           setPendingFiles(prev => [...prev, ...accepted].slice(0, MAX_FILE_ATTACHMENTS));
@@ -3351,6 +3372,7 @@ ${finalText}`
   const canAttach = acceptsImageAttachments || acceptsAudioAttachments || acceptsFileAttachments;
   const imageAttachmentLimitReached = acceptsImageAttachments
     && !acceptsAudioAttachments
+    && !acceptsFileAttachments
     && pendingImages.length >= MAX_IMAGES;
   const mediaAccept = isOpenMossCloneMode
     ? 'audio/wav,audio/x-wav,.wav'
@@ -3368,7 +3390,7 @@ ${finalText}`
   const fileAccept = acceptsFileAttachments
     ? [mediaAccept, DOCUMENT_INPUT_ACCEPT].filter(Boolean).join(',')
     : mediaAccept;
-  const canSubmit = !!currentModel && !isBusy && (currentCapability === 'audio' && !modeSupportsChatCompletions
+  const canSubmit = !!currentModel && !isBusy && !isAttaching && (currentCapability === 'audio' && !modeSupportsChatCompletions
     ? pendingAudioFiles.length > 0
     : currentCapability === 'image'
       ? (imageMode === 'edit' ? (!!inputValue.trim() && pendingImages.length > 0) : !!inputValue.trim())
@@ -4455,10 +4477,14 @@ ${finalText}`
                       ? 'WAV audio file'
                       : currentCapability === 'model3d'
                         ? 'PNG, JPEG, BMP, or GIF image'
-                        : acceptsFileAttachments && (acceptsImageAttachments || acceptsAudioAttachments)
+                        : acceptsFileAttachments && acceptsImageAttachments && acceptsAudioAttachments
                           ? 'Images, audio, text, and PDF files'
-                          : acceptsFileAttachments
-                            ? 'Text, code, and PDF files'
+                          : acceptsFileAttachments && acceptsImageAttachments
+                            ? 'Images, text, and PDF files'
+                            : acceptsFileAttachments && acceptsAudioAttachments
+                              ? 'Audio, text, and PDF files'
+                              : acceptsFileAttachments
+                                ? 'Text, code, and PDF files'
                             : acceptsImageAttachments && acceptsAudioAttachments
                               ? 'Images and audio files'
                               : acceptsImageAttachments

@@ -213,8 +213,31 @@ export function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function fenceFor(content: string): string {
+  // Markdown files routinely contain ``` lines; a fence only survives if it is
+  // longer than the longest backtick run inside the content.
+  let longest = 0;
+  for (const run of content.match(/`+/g) || []) {
+    if (run.length > longest) longest = run.length;
+  }
+  return '`'.repeat(Math.max(3, longest + 1));
+}
+
 export function wrapFileForPrompt(file: AttachedFile): string {
-  return `Attached file: ${file.filename}\n\`\`\`${file.language}\n${file.content}\n\`\`\``;
+  const fence = fenceFor(file.content);
+  return `Attached file: ${file.filename}\n${fence}${file.language}\n${file.content}\n${fence}`;
+}
+
+export function decodeTextFile(bytes: Uint8Array): string {
+  // UTF-16 text (PowerShell redirection, Notepad "Unicode") decodes to NUL
+  // bytes under UTF-8 and would be mistaken for binary without the BOM check.
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
+    return new TextDecoder('utf-16le').decode(bytes.subarray(2));
+  }
+  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
+    return new TextDecoder('utf-16be').decode(bytes.subarray(2));
+  }
+  return new TextDecoder('utf-8').decode(bytes);
 }
 
 export function composePromptWithFiles(text: string, files: AttachedFile[]): string {
