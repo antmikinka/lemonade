@@ -1,8 +1,9 @@
-// Conversation rail contract checks: manual rename and search filtering.
+// Conversation rail contract checks: rename, search filtering, and resizing.
 //
 // The rail lives inside ChatView (a 5k-line React component), so this suite
 // pins the behavioural contracts at the source level: custom-title
-// persistence, auto-title guards, rename interaction, and search filtering.
+// persistence, auto-title guards, rename interaction, search filtering, and
+// the user-resizable rail width.
 
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -86,8 +87,62 @@ assert.match(chatViewSource, /aria-label="Clear conversation search"/,
 assert.match(chatViewSource, /if \(event\.key === 'Escape' && railQuery\) \{\s*event\.preventDefault\(\);[\s\S]*?event\.stopPropagation\(\);\s*setRailQuery\(''\);\s*\}/,
   'Escape in the search field must clear the query without closing the mobile sheet');
 
+// ── Rail resize + row hierarchy ────────────────────────────────────────────
+
+assert.match(chatViewSource, /const CHAT_RAIL_WIDTH_KEY = 'chat_rail_width';/,
+  'rail width must persist under its own scoped localStorage key');
+assert.match(chatViewSource, /const CHAT_RAIL_MIN_WIDTH = 200;\s*const CHAT_RAIL_MAX_WIDTH = 480;/,
+  'the resizable rail must stay within usable bounds');
+assert.match(chatViewSource, /function loadRailWidth\(\): number \{[\s\S]*?Number\.isFinite\(stored\) \? clampRailWidth\(stored\) : CHAT_RAIL_EXPANDED_WIDTH/,
+  'a corrupted or missing stored width must fall back to the default');
+assert.match(chatViewSource, /window\.localStorage\.setItem\(scopedKey\(CHAT_RAIL_WIDTH_KEY\), String\(Math\.round\(width\)\)\)/,
+  'persistRailWidth must write through the scoped key so per-client layout stays client-side');
+assert.match(chatViewSource, /const \[railWidth, setRailWidth\] = useState<number>\(loadRailWidth\);/,
+  'rail width must be lazily initialized from storage');
+assert.match(chatViewSource, /\.\.\.\(railExpanded \? \{ '--rail-expanded': `\$\{railWidth\}px` \} : \{\}\),/,
+  'the expanded rail width must ride as an inline CSS variable so both grid variants resize');
+assert.match(chatViewSource, /style=\{chatLayoutStyle\}/,
+  'the layout style must apply even without the logs pane so the rail override takes effect');
+assert.match(chatViewSource, /document\.body\.classList\.add\('is-resizing-rail'\);/,
+  'rail dragging must set a body class so global cursor/selection/transition rules engage');
+assert.match(chatViewSource, /document\.body\.classList\.remove\('is-resizing-rail'\);\s*persistRailWidth\(latestWidth\);/,
+  'the rail width must persist on pointer release only, not on every move');
+assert.match(chatViewSource, /latestWidth = clampRailWidth\(startWidth \+ \(moveEvent\.clientX - startX\)\);/,
+  'the rail is on the left, so dragging its separator right must grow it');
+assert.match(chatViewSource, /const handleRailResizeStart = useCallback\(\(event: React\.PointerEvent<HTMLDivElement>\) => \{\s*if \(window\.innerWidth <= CHAT_MOBILE_BREAKPOINT\) return;/,
+  'the rail resizer must be inert on mobile, where the rail is a bottom sheet');
+assert.match(chatViewSource, /className="rail__resizer"\s*role="separator"\s*aria-orientation="vertical"\s*aria-label="Resize conversation sidebar"/,
+  'the rail handle must be an accessible separator, not a bare div');
+assert.match(chatViewSource, /aria-valuemin=\{CHAT_RAIL_MIN_WIDTH\}\s*aria-valuemax=\{CHAT_RAIL_MAX_WIDTH\}\s*aria-valuenow=\{railWidth\}/,
+  'the separator must announce its value range and current width');
+assert.match(chatViewSource, /\{railExpanded && \(\s*<div\s*className="rail__resizer"/,
+  'the handle must render only while the rail is expanded — a collapsed rail has nothing to resize');
+assert.match(chatViewSource, /const effectiveChatLogsWidth = clampChatLogsWidth\(chatLogsWidth, chatContainerWidth, railExpanded, railWidth\);/,
+  'the logs pane clamp must account for a widened rail or the panes could overflow');
+
+const railKeyHandler = /const handleRailResizeKeyDown = useCallback\([\s\S]*?\}, \[railWidth\]\);/.exec(chatViewSource)?.[0] || '';
+assert.ok(
+  railKeyHandler.includes("'ArrowLeft'") && railKeyHandler.includes("'ArrowRight'") &&
+  railKeyHandler.includes("'Home'") && railKeyHandler.includes("'End'"),
+  'keyboard users must resize the rail with arrows plus Home/End');
+assert.ok(/nextWidth = railWidth \+ step;/.test(railKeyHandler) && /nextWidth = railWidth - step;/.test(railKeyHandler),
+  'ArrowRight grows and ArrowLeft shrinks the left-hand rail');
+
+assert.match(chatViewSource, /title=\{`\$\{convTitle\} — double-click to rename`\}/,
+  'a truncated title must still be readable on hover without losing the rename hint');
+
 // ── Styling contracts ──────────────────────────────────────────────────────
 
+assert.match(stylesSource, /\.rail \{[\s\S]*?position: relative;/,
+  'the rail must anchor the absolutely positioned resize handle');
+assert.match(stylesSource, /\.rail__resizer \{[\s\S]*?cursor: col-resize;[\s\S]*?touch-action: none;/,
+  'the rail handle must present the resize affordance and claim pointer gestures');
+assert.match(stylesSource, /\.is-resizing-rail \{\s*cursor: col-resize;\s*user-select: none;\s*\}/,
+  'dragging the rail must not select its text');
+assert.match(stylesSource, /\.is-resizing-rail \.chat \{\s*transition: none;\s*\}/,
+  'the grid-template transition must not fight the drag');
+assert.match(stylesSource, /\.rail__list \.workspace-list-row__meta \{\s*font-size: 10px;\s*\}/,
+  'rail rows must de-emphasize the model name under the title the user scans');
 assert.match(stylesSource, /\.rail__search-wrap \{[\s\S]*?border: 1px solid var\(--border-subtle\)/,
   'the search field must use the standard subtle border treatment');
 assert.match(stylesSource, /\.rail__search-wrap:focus-within \{\s*border-color: var\(--accent-fg\);\s*\}/,
@@ -99,4 +154,4 @@ assert.match(stylesSource, /\.rail__title-text \{[\s\S]*?text-overflow: ellipsis
 assert.match(stylesSource, /\.chat:not\(\.rail-expanded\) \.rail__list,\s*\.chat:not\(\.rail-expanded\) \.rail > \.rail__search-wrap,/,
   'the search field must hide with the collapsed rail but stay available in the mobile sheet');
 
-console.log('Conversation rail rename/search contract checks passed.');
+console.log('Conversation rail contract checks passed.');

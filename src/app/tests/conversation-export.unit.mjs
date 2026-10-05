@@ -115,6 +115,13 @@ assert.equal(conversationExportFilename('  ..--Weird  title--.. '), 'Weird title
   'leading/trailing junk must strip and inner whitespace collapse');
 assert.equal(conversationExportFilename('report.'), 'report.md',
   'a trailing dot must not survive into the filename');
+assert.equal(
+  conversationExportFilename('Plan a sweet weekend trip to Kyoto including templ…'),
+  'Plan a sweet weekend trip to Kyoto including templ.md',
+  'a snippet title\'s truncation ellipsis must not leak into the filename');
+assert.equal(conversationExportFilename('…Leading ellipsis'), 'Leading ellipsis.md');
+assert.equal(conversationExportFilename('…'), 'conversation.md',
+  'an ellipsis-only title must fall back to the stable filename');
 assert.equal(conversationExportFilename('CON'), 'conversation-CON.md',
   'Windows reserved stems must be prefixed');
 assert.equal(conversationExportFilename('CON.md'), 'conversation-CON.md.md',

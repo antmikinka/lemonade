@@ -42,6 +42,10 @@ assert.match(exportSource, /\.slice\(0, MAX_EXPORT_FILENAME_STEM\)/,
   'filename stems must stay bounded');
 assert.match(exportSource, /if \(!stem\) return 'conversation\.md';/,
   'a fully-sanitized-away title must fall back to a stable filename');
+assert.match(exportSource, /\.replace\(\/\^\[\.\\s…-\]\+\/, ''\)/,
+  'a snippet truncation ellipsis must strip from the stem start');
+assert.match(exportSource, /\.replace\(\/\[\.\\s…-\]\+\$\/, ''\);/,
+  'a snippet truncation ellipsis must strip from the stem end or the .md reads as missing');
 assert.match(exportSource, /new Blob\(\[markdown\], \{ type: 'text\/markdown;charset=utf-8' \}\)/,
   'downloads must be typed as UTF-8 markdown');
 assert.match(exportSource, /window\.setTimeout\(\(\) => URL\.revokeObjectURL\(url\), 1000\);/,
