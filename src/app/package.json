@@ -22,6 +22,7 @@
     "test:chat-audio": "node tests/chat-audio-capability.runtime.cjs",
     "test:conversation-rail": "node tests/conversation-rail.runtime.cjs",
     "test:conversation-export": "node tests/conversation-export.runtime.cjs && node tests/conversation-export.unit.mjs",
+    "test:conversation-title": "node tests/conversation-title.runtime.cjs && node tests/conversation-title.unit.mjs",
     "test:chat-file-attachments": "node tests/chat-file-attachments.runtime.cjs && node tests/chat-file-attachments.unit.mjs",
     "test:model-kinds": "node tests/model-kind-classification.runtime.cjs",
     "test:mcp-mock": "node tests/mock-mcp-server.runtime.cjs",
