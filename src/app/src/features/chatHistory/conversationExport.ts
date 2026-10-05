@@ -54,12 +54,14 @@ export function conversationToMarkdown(
 }
 
 export function conversationExportFilename(title: string): string {
+  // The … is stripped too: derived snippet titles truncate with it, and a stem
+  // ending "templ….md" reads as a missing extension.
   const stem = title
     .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-')
     .replace(/\s+/g, ' ')
-    .replace(/^[.\s-]+/, '')
+    .replace(/^[.\s…-]+/, '')
     .slice(0, MAX_EXPORT_FILENAME_STEM)
-    .replace(/[.\s-]+$/, '');
+    .replace(/[.\s…-]+$/, '');
   if (!stem) return 'conversation.md';
   // Windows matches reserved names against the part before the first dot, so
   // "CON.md" is just as rejected as "CON".

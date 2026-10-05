@@ -159,11 +159,17 @@ const CHAT_LOGS_MIN_REVEALED_CHAT_WIDTH = 360;
 const CHAT_LOGS_RESIZER_WIDTH = 12;
 const CHAT_RAIL_COLLAPSED_WIDTH = 56;
 const CHAT_RAIL_EXPANDED_WIDTH = 248;
+const CHAT_RAIL_WIDTH_KEY = 'chat_rail_width';
+const CHAT_RAIL_MIN_WIDTH = 200;
+const CHAT_RAIL_MAX_WIDTH = 480;
 const CHAT_MOBILE_BREAKPOINT = 768;
 
-function chatRailWidth(railExpanded = true): number {
+function chatRailWidth(
+  railExpanded = true,
+  expandedWidth = CHAT_RAIL_EXPANDED_WIDTH,
+): number {
   if (typeof window !== 'undefined' && window.innerWidth <= CHAT_MOBILE_BREAKPOINT) return 0;
-  return railExpanded ? CHAT_RAIL_EXPANDED_WIDTH : CHAT_RAIL_COLLAPSED_WIDTH;
+  return railExpanded ? expandedWidth : CHAT_RAIL_COLLAPSED_WIDTH;
 }
 
 function chatLogsResizerWidth(): number {
@@ -171,8 +177,12 @@ function chatLogsResizerWidth(): number {
   return CHAT_LOGS_RESIZER_WIDTH;
 }
 
-function maxChatLogsWidthForLayout(containerWidth: number, railExpanded = true): number {
-  const railWidth = chatRailWidth(railExpanded);
+function maxChatLogsWidthForLayout(
+  containerWidth: number,
+  railExpanded = true,
+  railExpandedWidth = CHAT_RAIL_EXPANDED_WIDTH,
+): number {
+  const railWidth = chatRailWidth(railExpanded, railExpandedWidth);
   const resizerWidth = chatLogsResizerWidth();
   const availableWidth = Math.max(0, containerWidth - railWidth - resizerWidth);
   const chatWidthMax = availableWidth - CHAT_LOGS_MIN_REVEALED_CHAT_WIDTH;
@@ -181,10 +191,18 @@ function maxChatLogsWidthForLayout(containerWidth: number, railExpanded = true):
   return Math.max(CHAT_LOGS_MIN_WIDTH, Math.min(CHAT_LOGS_MAX_WIDTH, layoutMax));
 }
 
-function clampChatLogsWidth(width: number, containerWidth: number, railExpanded = true): number {
+function clampChatLogsWidth(
+  width: number,
+  containerWidth: number,
+  railExpanded = true,
+  railExpandedWidth = CHAT_RAIL_EXPANDED_WIDTH,
+): number {
   return Math.max(
     CHAT_LOGS_MIN_WIDTH,
-    Math.min(maxChatLogsWidthForLayout(containerWidth, railExpanded), Math.round(width)),
+    Math.min(
+      maxChatLogsWidthForLayout(containerWidth, railExpanded, railExpandedWidth),
+      Math.round(width),
+    ),
   );
 }
 
@@ -224,6 +242,29 @@ function persistChatLogsWidth(width: number): void {
     window.localStorage.setItem(scopedKey(CHAT_LOGS_WIDTH_KEY), String(Math.round(width)));
   } catch {
     // Non-critical: split-pane width persistence is best-effort only.
+  }
+}
+
+function clampRailWidth(width: number): number {
+  return Math.max(CHAT_RAIL_MIN_WIDTH, Math.min(CHAT_RAIL_MAX_WIDTH, Math.round(width)));
+}
+
+function loadRailWidth(): number {
+  if (typeof window === 'undefined') return CHAT_RAIL_EXPANDED_WIDTH;
+  try {
+    const raw = window.localStorage.getItem(scopedKey(CHAT_RAIL_WIDTH_KEY));
+    const stored = raw === null ? Number.NaN : Number(raw);
+    return Number.isFinite(stored) ? clampRailWidth(stored) : CHAT_RAIL_EXPANDED_WIDTH;
+  } catch {
+    return CHAT_RAIL_EXPANDED_WIDTH;
+  }
+}
+
+function persistRailWidth(width: number): void {
+  try {
+    window.localStorage.setItem(scopedKey(CHAT_RAIL_WIDTH_KEY), String(Math.round(width)));
+  } catch {
+    // Non-critical: rail width persistence is best-effort only.
   }
 }
 
@@ -977,6 +1018,7 @@ const ChatView: React.FC<ChatViewProps> = ({
   const [ttsPlaybackSettings, setTtsPlaybackSettings] = useState(() => loadTtsPlaybackSettings());
   const [globalModelSettings, setGlobalModelSettings] = useState(() => loadGlobalModelSettings());
   const [railExpanded, setRailExpanded] = useState(true);
+  const [railWidth, setRailWidth] = useState<number>(loadRailWidth);
   const autoCollapsedRailForLogsRef = useRef(false);
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const sheetHandleRef = useRef<HTMLDivElement>(null);
@@ -1116,18 +1158,21 @@ const ChatView: React.FC<ChatViewProps> = ({
   // chatLogsWidth is the user's preferred split size. effectiveChatLogsWidth
   // may be smaller while History is expanded or the window is narrow, but that
   // temporary constraint is deliberately not written back to localStorage.
-  const effectiveChatLogsWidth = clampChatLogsWidth(chatLogsWidth, chatContainerWidth, railExpanded);
+  const effectiveChatLogsWidth = clampChatLogsWidth(chatLogsWidth, chatContainerWidth, railExpanded, railWidth);
   const chatLayoutStyle = useMemo(() => ({
-    '--chat-logs-width': `${effectiveChatLogsWidth}px`,
-    '--chat-logs-resizer-width': `${CHAT_LOGS_RESIZER_WIDTH}px`,
-  } as React.CSSProperties), [effectiveChatLogsWidth]);
+    ...(railExpanded ? { '--rail-expanded': `${railWidth}px` } : {}),
+    ...(showInlineLogs ? {
+      '--chat-logs-width': `${effectiveChatLogsWidth}px`,
+      '--chat-logs-resizer-width': `${CHAT_LOGS_RESIZER_WIDTH}px`,
+    } : {}),
+  } as React.CSSProperties), [effectiveChatLogsWidth, railExpanded, railWidth, showInlineLogs]);
 
   const handleChatLogsResizeStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (window.innerWidth <= CHAT_MOBILE_BREAKPOINT) return;
     event.preventDefault();
 
     const startX = event.clientX;
-    const startWidth = clampChatLogsWidth(chatLogsWidth, chatContainerWidth, railExpanded);
+    const startWidth = clampChatLogsWidth(chatLogsWidth, chatContainerWidth, railExpanded, railWidth);
     let latestWidth = startWidth;
     const handle = event.currentTarget;
     try { handle.setPointerCapture(event.pointerId); } catch { /* ignore */ }
@@ -1139,6 +1184,7 @@ const ChatView: React.FC<ChatViewProps> = ({
         startWidth + (moveEvent.clientX - startX),
         chatContainerWidth,
         railExpanded,
+        railWidth,
       );
       setChatLogsWidth(latestWidth);
     };
@@ -1156,31 +1202,86 @@ const ChatView: React.FC<ChatViewProps> = ({
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', stopResize, { once: true });
     window.addEventListener('pointercancel', stopResize, { once: true });
-  }, [chatContainerWidth, chatLogsWidth, railExpanded]);
+  }, [chatContainerWidth, chatLogsWidth, railExpanded, railWidth]);
 
   const handleChatLogsResizeKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     const step = event.shiftKey ? 48 : 20;
-    const currentWidth = clampChatLogsWidth(chatLogsWidth, chatContainerWidth, railExpanded);
+    const currentWidth = clampChatLogsWidth(chatLogsWidth, chatContainerWidth, railExpanded, railWidth);
     let nextWidth: number | null = null;
     if (event.key === 'ArrowLeft') {
       event.preventDefault();
-      nextWidth = clampChatLogsWidth(currentWidth - step, chatContainerWidth, railExpanded);
+      nextWidth = clampChatLogsWidth(currentWidth - step, chatContainerWidth, railExpanded, railWidth);
     } else if (event.key === 'ArrowRight') {
       event.preventDefault();
-      nextWidth = clampChatLogsWidth(currentWidth + step, chatContainerWidth, railExpanded);
+      nextWidth = clampChatLogsWidth(currentWidth + step, chatContainerWidth, railExpanded, railWidth);
     } else if (event.key === 'Home') {
       event.preventDefault();
       nextWidth = CHAT_LOGS_MIN_WIDTH;
     } else if (event.key === 'End') {
       event.preventDefault();
-      nextWidth = maxChatLogsWidthForLayout(chatContainerWidth, railExpanded);
+      nextWidth = maxChatLogsWidthForLayout(chatContainerWidth, railExpanded, railWidth);
     }
 
     if (nextWidth !== null) {
       setChatLogsWidth(nextWidth);
       persistChatLogsWidth(nextWidth);
     }
-  }, [chatContainerWidth, chatLogsWidth, railExpanded]);
+  }, [chatContainerWidth, chatLogsWidth, railExpanded, railWidth]);
+
+  const handleRailResizeStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (window.innerWidth <= CHAT_MOBILE_BREAKPOINT) return;
+    event.preventDefault();
+
+    const startX = event.clientX;
+    const startWidth = railWidth;
+    let latestWidth = startWidth;
+    const handle = event.currentTarget;
+    try { handle.setPointerCapture(event.pointerId); } catch { /* ignore */ }
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      // The rail sits on the left, so dragging its separator right grows it.
+      latestWidth = clampRailWidth(startWidth + (moveEvent.clientX - startX));
+      setRailWidth(latestWidth);
+    };
+
+    const stopResize = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', stopResize);
+      window.removeEventListener('pointercancel', stopResize);
+      document.body.classList.remove('is-resizing-rail');
+      persistRailWidth(latestWidth);
+      try { handle.releasePointerCapture(event.pointerId); } catch { /* ignore */ }
+    };
+
+    document.body.classList.add('is-resizing-rail');
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', stopResize, { once: true });
+    window.addEventListener('pointercancel', stopResize, { once: true });
+  }, [railWidth]);
+
+  const handleRailResizeKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = event.shiftKey ? 48 : 20;
+    let nextWidth: number | null = null;
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      nextWidth = railWidth - step;
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      nextWidth = railWidth + step;
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      nextWidth = CHAT_RAIL_MIN_WIDTH;
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      nextWidth = CHAT_RAIL_MAX_WIDTH;
+    }
+
+    if (nextWidth !== null) {
+      const clamped = clampRailWidth(nextWidth);
+      setRailWidth(clamped);
+      persistRailWidth(clamped);
+    }
+  }, [railWidth]);
 
   const customModelInfos = useMemo(
     () => serverModels.filter(model => (model as any).custom === true),
@@ -3654,7 +3755,7 @@ ${finalText}`
     ) : (
       <span
         className="rail__title-text"
-        title="Double-click to rename"
+        title={`${convTitle} — double-click to rename`}
         onDoubleClick={event => {
           event.stopPropagation();
           startRenameConversation(c.id, convTitle);
@@ -3717,7 +3818,7 @@ ${finalText}`
       <div
         ref={chatRootRef}
         className={`chat ${railExpanded ? 'rail-expanded' : ''}${showInlineLogs ? ' chat--with-logs' : ''}`}
-        style={showInlineLogs ? chatLayoutStyle : undefined}
+        style={chatLayoutStyle}
         data-startup-ready="chat"
       >
       {/* Conversation rail */}
@@ -3782,6 +3883,20 @@ ${finalText}`
           <p className="rail__empty" role="status">No conversations match “{railQuery.trim()}”</p>
         )}
 
+        {railExpanded && (
+          <div
+            className="rail__resizer"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize conversation sidebar"
+            aria-valuemin={CHAT_RAIL_MIN_WIDTH}
+            aria-valuemax={CHAT_RAIL_MAX_WIDTH}
+            aria-valuenow={railWidth}
+            tabIndex={0}
+            onPointerDown={handleRailResizeStart}
+            onKeyDown={handleRailResizeKeyDown}
+          />
+        )}
       </aside>
 
       {/* Mobile bottom sheet for conversations */}
@@ -4018,7 +4133,7 @@ ${finalText}`
             aria-orientation="vertical"
             aria-label="Resize logs panel"
             aria-valuemin={CHAT_LOGS_MIN_WIDTH}
-            aria-valuemax={maxChatLogsWidthForLayout(chatContainerWidth, railExpanded)}
+            aria-valuemax={maxChatLogsWidthForLayout(chatContainerWidth, railExpanded, railWidth)}
             aria-valuenow={effectiveChatLogsWidth}
             tabIndex={0}
             onPointerDown={handleChatLogsResizeStart}

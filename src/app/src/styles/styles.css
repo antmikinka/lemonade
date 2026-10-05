@@ -596,6 +596,7 @@ input[type="checkbox"]:disabled {
 /* ---------- Conversation rail ---------- */
 .rail {
   grid-area: rail / rail / composer / rail;
+  position: relative;
   background: var(--surface-1);
   border-right: 1px solid var(--border-subtle);
   display: flex;
@@ -605,6 +606,13 @@ input[type="checkbox"]:disabled {
 }
 
 .chat.rail-expanded .rail__title { opacity: 1; }
+
+/* Long model names compete with the title the user actually scans for; the rail
+   lists (desktop + mobile sheet) get a smaller meta line. The shared
+   model-catalog rows keep the default size. */
+.rail__list .workspace-list-row__meta {
+  font-size: 10px;
+}
 
 .rail__new-wrap {
   padding: var(--space-2) var(--space-3) var(--space-1);
@@ -5955,6 +5963,54 @@ optgroup {
 }
 
 .is-resizing-chat-logs .chat {
+  transition: none;
+}
+
+.rail__resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 8px;
+  cursor: col-resize;
+  z-index: 6;
+  touch-action: none;
+}
+
+.rail__resizer::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: var(--space-3);
+  bottom: var(--space-3);
+  width: 1px;
+  transform: translateX(-50%);
+  border-radius: var(--radius-pill);
+  /* Transparent at rest — the rail's border-right already draws the divider;
+     a second line 4px inboard would read as a rendering bug. */
+  background: transparent;
+  transition: background var(--duration-fast) var(--ease-out),
+              width var(--duration-fast) var(--ease-out);
+}
+
+.rail__resizer:hover::after,
+.rail__resizer:focus-visible::after,
+.is-resizing-rail .rail__resizer::after {
+  width: 2px;
+  background: var(--accent-fg);
+}
+
+.rail__resizer:focus-visible {
+  outline: 2px solid var(--accent-focus);
+  outline-offset: -2px;
+}
+
+.is-resizing-rail {
+  cursor: col-resize;
+  user-select: none;
+}
+
+.is-resizing-rail .chat {
   transition: none;
 }
 
