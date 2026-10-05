@@ -41,6 +41,7 @@ jobs:
           npm run test:chat-audio
           npm run test:conversation-rail
           npm run test:conversation-export
+          npm run test:conversation-title
           npm run test:chat-file-attachments
           npm run test:model-kinds
           npm run test:mcp-mock

@@ -50,6 +50,12 @@ import {
   downloadMarkdownFile,
   type ExportableConversation,
 } from '../features/chatHistory/conversationExport';
+import {
+  AUTO_TITLE_MAX_TOKENS,
+  AUTO_TITLE_TEMPERATURE,
+  buildTitleRequest,
+  sanitizeAutoTitle,
+} from '../features/chatHistory/conversationTitle';
 import { CHAT_HISTORY_PREFERENCE_EVENT, loadChatHistoryPreference } from '../features/chatHistory/historySettings';
 import type { DownloadListItem } from '../features/downloadManager/downloadStore';
 import { findModelInfoByName, getAudioTranscriptionComponent, getPrimaryChatComponent, getVisionChatComponent, isCollectionModel, virtualLoadedCollection } from '../features/collections/collectionModels';
@@ -1029,6 +1035,8 @@ const ChatView: React.FC<ChatViewProps> = ({
   const liveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wasStreamingRef = useRef(false);
   const streamModelsRef = useRef<Record<string, ModelSnapshot | null>>({});
+  // handleStreamDone cannot read conversation state, so the first-exchange seed is armed at send time.
+  const pendingAutoTitleRef = useRef<Map<string, string>>(new Map());
   const realtimeRef = useRef<RealtimeTranscriptionHandle | null>(null);
   const isLiveRecordingRef = useRef(false);
   const liveTranscriptRef = useRef('');
@@ -2031,6 +2039,24 @@ const ChatView: React.FC<ChatViewProps> = ({
     }
   }, [knownModelInfos, loadModelForChat, loadedModels, stopAutoSpeech, ttsPlaybackSettings.modelName, ttsPlaybackSettings.playbackMode, ttsPlaybackSettings.speakUserText]);
 
+  const runAutoTitle = useCallback(async (convoId: string, userText: string, assistantText: string, modelName: string) => {
+    try {
+      const api = await getApiClient();
+      const raw = await api.chatCompletionOnce(modelName, buildTitleRequest(userText, assistantText), {
+        max_tokens: AUTO_TITLE_MAX_TOKENS,
+        temperature: AUTO_TITLE_TEMPERATURE,
+        // Thinking models would spend the whole token budget on reasoning and
+        // return an empty title, so the naming request disables thinking.
+        enable_thinking: false,
+      });
+      const title = sanitizeAutoTitle(raw);
+      if (!title) return;
+      updateConversation(convoId, c => (c.customTitle ? c : { ...c, title }));
+    } catch {
+      // A failed naming request keeps the derived snippet title.
+    }
+  }, [updateConversation]);
+
   // Streaming hook — owns token buffer, flush interval, abort controllers
   const handleStreamDone = useCallback((convoId: string, stats: ChatCompletionStats, toolCalls?: ToolCallEntry[]) => {
     const model = streamModelsRef.current[convoId] || null;
@@ -2066,8 +2092,13 @@ const ChatView: React.FC<ChatViewProps> = ({
       }],
       updatedAt: Date.now(),
     }));
+    const autoTitleSeed = pendingAutoTitleRef.current.get(convoId);
+    pendingAutoTitleRef.current.delete(convoId);
+    if (autoTitleSeed !== undefined && model?.name && assistantContent) {
+      void runAutoTitle(convoId, autoTitleSeed, assistantContent, model.name);
+    }
     if (!generatedAudio && !generated3d && !generatedImages.length) void speakWithPinnedTts(assistantContent, 'assistant');
-  }, [speakWithPinnedTts, trackGeneratedMediaUrl, updateConversation]);
+  }, [runAutoTitle, speakWithPinnedTts, trackGeneratedMediaUrl, updateConversation]);
 
   const handleStreamError = useCallback((convoId: string, message: string) => {
     const model = streamModelsRef.current[convoId] || null;
@@ -2235,6 +2266,7 @@ const ChatView: React.FC<ChatViewProps> = ({
   const handleDeleteConversation = useCallback((id: string) => {
     streaming.stop(id);
     delete streamModelsRef.current[id];
+    pendingAutoTitleRef.current.delete(id);
     setConversations(prev => prev.filter(c => c.id !== id));
     if (activeId === id) setActiveId(null);
     setRenamingId(prev => (prev === id ? null : prev));
@@ -2986,7 +3018,8 @@ ${finalText}`
 
     let convoId = activeId;
     const initialSnapshot = currentModelSnapshot;
-    const currentMessages = (conversations.find(c => c.id === convoId)?.messages || []);
+    const existingConvo = conversations.find(c => c.id === convoId);
+    const currentMessages = (existingConvo?.messages || []);
     const userMessage: Message = {
       role: 'user',
       content: text || (audioFiles[0] ? `Audio file: ${audioFiles[0].name}` : ''),
@@ -3008,6 +3041,7 @@ ${finalText}`
       convoId = newConvo.id;
       setConversations(prev => [newConvo, ...prev]);
       setActiveId(convoId);
+      pendingAutoTitleRef.current.set(convoId, userMessage.content);
     } else {
       updateConversation(convoId, conversation => ({
         ...conversation,
@@ -3016,6 +3050,9 @@ ${finalText}`
         title: conversation.messages.length === 0 && !conversation.customTitle ? titleFromInput(text, hasImages, audioFiles, pendingFiles) : conversation.title,
         updatedAt: Date.now(),
       }));
+      if (currentMessages.length === 0 && !existingConvo?.customTitle) {
+        pendingAutoTitleRef.current.set(convoId, userMessage.content);
+      }
     }
 
     setInputValue('');
@@ -3134,6 +3171,9 @@ ${finalText}`
       title: messageIndex === 0 && !c.customTitle ? titleFromInput(text, !!editedUserMessage.images?.length) : c.title,
       updatedAt: Date.now(),
     } : c));
+    if (messageIndex === 0 && !convo.customTitle) {
+      pendingAutoTitleRef.current.set(activeId, text);
+    }
 
     await startAssistantResponse(activeId, currentModelSnapshot, editedUserMessage, priorMessages, [], false);
   }, [activeId, connectionStatus, conversations, currentModel, currentModelSnapshot, isBusy, startAssistantResponse]);
