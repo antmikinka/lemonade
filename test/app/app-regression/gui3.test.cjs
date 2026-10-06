@@ -13,10 +13,13 @@ const CHAT_VIEW = 'src/app/src/components/ChatView.tsx';
 const CHAT_ATTACHMENTS = path.join(
   __dirname, '..', '..', '..', 'src', 'app', 'src', 'features', 'chatAttachments', 'fileAttachments.ts',
 );
+const CHAT_QUEUE = path.join(
+  __dirname, '..', '..', '..', 'src', 'app', 'src', 'features', 'chatQueue.ts',
+);
 
-// Transpile-on-require so the pure attachment helpers can be unit-tested here
+// Transpile-on-require so the pure feature helpers can be unit-tested here
 // (same loader pattern as the legacy fileAttachments suite).
-function loadChatAttachments() {
+function loadTsModule(absPath) {
   let ts = null;
   try { ts = require(path.join(__dirname, '..', '..', '..', 'src', 'app', 'node_modules', 'typescript')); }
   catch (_) {
@@ -35,8 +38,10 @@ function loadChatAttachments() {
       module._compile(output, filename);
     };
   }
-  return require(CHAT_ATTACHMENTS);
+  return require(absPath);
 }
+function loadChatAttachments() { return loadTsModule(CHAT_ATTACHMENTS); }
+function loadChatQueue() { return loadTsModule(CHAT_QUEUE); }
 const MODEL_MANAGER = 'src/app/src/components/ModelManager.tsx';
 const OMNI_TOOLS = 'src/app/src/tools/omniTools.ts';
 const TOOL_DEFINITIONS = 'src/app/src/tools/toolDefinitions.json';
@@ -146,6 +151,36 @@ const tests = [
       assert.ok(fa.composePromptWithFiles('look', [legacy]).startsWith('look'));
       const nested = fa.wrapFileForPrompt({ ...legacy, content: '```nested```' });
       assert.ok(nested.includes('````markdown'), 'fence must outgrow backtick runs in content');
+    },
+  },
+  {
+    name: 'chat queue helpers cap at ten, mint unique ids, and summarize drafts',
+    run() {
+      const q = loadChatQueue();
+      if (!q) return { skip: true, reason: "typescript not installed - run 'npm ci' in src/app first" };
+      assert.equal(q.MAX_QUEUED_MESSAGES, 10);
+      const first = q.createQueuedMessageId();
+      const second = q.createQueuedMessageId();
+      assert.match(first, /^queued-/);
+      assert.notEqual(first, second, 'ids minted in the same millisecond must stay unique');
+
+      let queue = [];
+      for (let i = 0; i < q.MAX_QUEUED_MESSAGES; i += 1) {
+        const result = q.withQueueCap(queue, { id: `m${i}`, text: `follow-up ${i}` });
+        assert.equal(result.dropped, false);
+        queue = result.kept;
+      }
+      const overflow = q.withQueueCap(queue, { id: 'overflow', text: 'one too many' });
+      assert.equal(overflow.dropped, true, 'the 11th message must be rejected');
+      assert.equal(overflow.kept, queue, 'a rejection must return the original queue untouched');
+
+      assert.equal(q.summarizeQueuedItem({ id: 'a', text: 'plain question' }), 'plain question');
+      assert.ok(q.summarizeQueuedItem({ id: 'a', text: 'x'.repeat(80) }).endsWith('…'));
+      assert.equal(
+        q.summarizeQueuedItem({ id: 'a', text: '', files: [{ filename: 'alpha.txt', language: 'text', content: '', size: 1 }] }),
+        'File: alpha.txt',
+      );
+      assert.equal(q.summarizeQueuedItem({ id: 'a', text: '   ' }), 'Empty message');
     },
   },
   {
