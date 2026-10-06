@@ -77,6 +77,13 @@ import {
   languageForFilename,
 } from '../features/chatAttachments/fileAttachments';
 import {
+  MAX_QUEUED_MESSAGES,
+  QueuedChatMessage,
+  createQueuedMessageId,
+  summarizeQueuedItem,
+  withQueueCap,
+} from '../features/chatQueue';
+import {
   LEMONADE_DEFAULT_CHAT_MODELS,
   lemonadeDefaultModel,
   lemonadeDefaultModelInfo,
@@ -1009,6 +1016,8 @@ const ChatView: React.FC<ChatViewProps> = ({
   const [pendingFiles, setPendingFiles] = useState<AttachedFile[]>([]);
   const [fileAttachmentError, setFileAttachmentError] = useState<string | null>(null);
   const [isAttaching, setIsAttaching] = useState(false);
+  const [queued, setQueued] = useState<Record<string, QueuedChatMessage[]>>({});
+  const [queueNotice, setQueueNotice] = useState<string | null>(null);
   const [isLiveRecording, setIsLiveRecording] = useState(false);
   const [isLiveConnected, setIsLiveConnected] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -1080,6 +1089,17 @@ const ChatView: React.FC<ChatViewProps> = ({
   const streamModelsRef = useRef<Record<string, ModelSnapshot | null>>({});
   // handleStreamDone cannot read conversation state, so the first-exchange seed is armed at send time.
   const pendingAutoTitleRef = useRef<Map<string, string>>(new Map());
+  // The drain loop outlives the render that started it, so it reads conversation
+  // history and connection state through mirrors instead of stale closures.
+  const conversationsRef = useRef<Conversation[]>(conversations);
+  conversationsRef.current = conversations;
+  const activeIdRef = useRef<string | null>(activeId);
+  activeIdRef.current = activeId;
+  const connectionRef = useRef(connectionStatus);
+  connectionRef.current = connectionStatus;
+  const queuedRef = useRef<Record<string, QueuedChatMessage[]>>({});
+  const drainLockRef = useRef<Set<string>>(new Set());
+  const submitMessageRef = useRef<(convoId: string | null, payload: QueuedChatMessage) => Promise<void>>(async () => {});
   const realtimeRef = useRef<RealtimeTranscriptionHandle | null>(null);
   const isLiveRecordingRef = useRef(false);
   const liveTranscriptRef = useRef('');
@@ -1623,6 +1643,16 @@ const ChatView: React.FC<ChatViewProps> = ({
       setPendingFiles([]);
       setFileAttachmentError(null);
     }
+  }, [currentCapability]);
+
+  useEffect(() => {
+    // Queued messages only drain through the chat-completions send path, so
+    // losing chat capability must not leave a stranded queue behind.
+    if (currentCapability === 'chat') return;
+    drainLockRef.current.clear();
+    queuedRef.current = {};
+    setQueued({});
+    setQueueNotice(null);
   }, [currentCapability]);
 
   const capabilityForLoaded = useCallback((model: LoadedModel) => {
@@ -2369,6 +2399,14 @@ const ChatView: React.FC<ChatViewProps> = ({
     streaming.stop(id);
     delete streamModelsRef.current[id];
     pendingAutoTitleRef.current.delete(id);
+    drainLockRef.current.delete(id);
+    delete queuedRef.current[id];
+    setQueued(prev => {
+      if (!(id in prev)) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
     setConversations(prev => prev.filter(c => c.id !== id));
     if (activeId === id) setActiveId(null);
     setRenamingId(prev => (prev === id ? null : prev));
@@ -3100,41 +3138,41 @@ ${finalText}`
     useMcp,
   ]);
 
-  const handleSend = async (overrideText?: string) => {
-    const text = (overrideText ?? inputValue).trim();
-    const audioFiles = [...pendingAudioFiles];
-    const hasImages = pendingImages.length > 0;
-    const hasFiles = pendingFiles.length > 0 && acceptsFileAttachments;
-    const canSubmitContent = currentCapability === 'audio' && !modeSupportsChatCompletions
-      ? audioFiles.length > 0
-      : currentCapability === 'image'
-        ? (imageMode === 'edit' ? (!!text && hasImages) : !!text)
-        : currentCapability === 'audio-generation'
-          ? !!text
-          : currentCapability === 'model3d'
-            ? (model3dSettings.sourceMode === 'image' ? hasImages : (!!text && !!model3dSettings.imageModel))
-            : currentCapability === 'tts'
-              ? (!!text && !openMossDescribeUnavailable && !openMossCloneUnavailable)
-              : (!!text || hasImages || hasFiles || (canUseAudioInput && audioFiles.length > 0));
-    if (!canSubmitContent || isBusy || isAttaching || !currentModelSnapshot) return;
+  const clearComposer = () => {
+    setInputValue('');
+    setPendingImages([]);
+    setPendingAudioFiles([]);
+    setPendingFiles([]);
+    setFileAttachmentError(null);
+  };
 
-    let convoId = activeId;
+  // Sends one composed-or-queued message end to end: appends the user turn,
+  // arms auto-title, prepares the model, and awaits the assistant stream.
+  // History is read through conversationsRef because the drain loop invokes
+  // this long after the render that captured it.
+  const submitMessage = async (convoIdIn: string | null, payload: QueuedChatMessage) => {
+    const text = payload.text;
+    const audioFiles = payload.audioFiles || [];
+    const hasImages = !!payload.images?.length;
     const initialSnapshot = currentModelSnapshot;
-    const existingConvo = conversations.find(c => c.id === convoId);
+    if (!initialSnapshot) return;
+
+    let convoId = convoIdIn;
+    const existingConvo = conversationsRef.current.find(c => c.id === convoId);
     const currentMessages = (existingConvo?.messages || []);
     const userMessage: Message = {
       role: 'user',
       content: text || (audioFiles[0] ? `Audio file: ${audioFiles[0].name}` : ''),
-      images: hasImages ? [...pendingImages] : undefined,
-      files: hasFiles ? [...pendingFiles] : undefined,
-      audioName: audioFiles[0]?.name,
+      images: payload.images,
+      files: payload.files,
+      audioName: payload.audioName,
       model: initialSnapshot,
     };
 
     if (!convoId) {
       const newConvo: Conversation = {
         id: generateId(),
-        title: titleFromInput(text, hasImages, audioFiles, pendingFiles),
+        title: titleFromInput(text, hasImages, audioFiles, payload.files || []),
         model: initialSnapshot,
         messages: [userMessage],
         updatedAt: Date.now(),
@@ -3149,7 +3187,7 @@ ${finalText}`
         ...conversation,
         messages: [...conversation.messages, userMessage],
         model: initialSnapshot,
-        title: conversation.messages.length === 0 && !conversation.customTitle ? titleFromInput(text, hasImages, audioFiles, pendingFiles) : conversation.title,
+        title: conversation.messages.length === 0 && !conversation.customTitle ? titleFromInput(text, hasImages, audioFiles, payload.files || []) : conversation.title,
         updatedAt: Date.now(),
       }));
       if (currentMessages.length === 0 && !existingConvo?.customTitle) {
@@ -3157,11 +3195,6 @@ ${finalText}`
       }
     }
 
-    setInputValue('');
-    setPendingImages([]);
-    setPendingAudioFiles([]);
-    setPendingFiles([]);
-    setFileAttachmentError(null);
     void speakWithPinnedTts(text, 'user');
 
     if (connectionStatus !== 'connected') {
@@ -3207,9 +3240,111 @@ ${finalText}`
       requestAnimationFrame(() => inputRef.current?.focus());
     }
   };
+  submitMessageRef.current = submitMessage;
+
+  const handleSend = async (overrideText?: string) => {
+    const text = (overrideText ?? inputValue).trim();
+    const audioFiles = [...pendingAudioFiles];
+    const hasImages = pendingImages.length > 0;
+    const hasFiles = pendingFiles.length > 0 && acceptsFileAttachments;
+    const canSubmitContent = currentCapability === 'audio' && !modeSupportsChatCompletions
+      ? audioFiles.length > 0
+      : currentCapability === 'image'
+        ? (imageMode === 'edit' ? (!!text && hasImages) : !!text)
+        : currentCapability === 'audio-generation'
+          ? !!text
+          : currentCapability === 'model3d'
+            ? (model3dSettings.sourceMode === 'image' ? hasImages : (!!text && !!model3dSettings.imageModel))
+            : currentCapability === 'tts'
+              ? (!!text && !openMossDescribeUnavailable && !openMossCloneUnavailable)
+              : (!!text || hasImages || hasFiles || (canUseAudioInput && audioFiles.length > 0));
+    if (!canSubmitContent || isAttaching || !currentModelSnapshot) return;
+
+    const payload: QueuedChatMessage = {
+      id: createQueuedMessageId(),
+      text,
+      images: hasImages ? [...pendingImages] : undefined,
+      files: hasFiles ? [...pendingFiles] : undefined,
+      audioFiles: audioFiles.length > 0 ? audioFiles : undefined,
+      audioName: audioFiles[0]?.name,
+    };
+
+    // A drain in flight counts as busy: sending directly in the gap between two
+    // queued items would double-stream the same conversation.
+    if (isBusy || (activeId !== null && drainLockRef.current.has(activeId))) {
+      if (currentCapability !== 'chat' || !activeId) return;
+      const { kept, dropped } = withQueueCap(queuedRef.current[activeId] || [], payload);
+      if (dropped) {
+        // The draft stays in the composer — a full queue must not eat it.
+        setQueueNotice(`Queue is full — the limit is ${MAX_QUEUED_MESSAGES} messages. Send or remove a queued message first.`);
+        return;
+      }
+      queuedRef.current = { ...queuedRef.current, [activeId]: kept };
+      setQueued(queuedRef.current);
+      setQueueNotice(null);
+      clearComposer();
+      return;
+    }
+
+    clearComposer();
+    await submitMessage(activeId, payload);
+  };
+
+  const drainQueue = useCallback(async (convoId: string) => {
+    if (drainLockRef.current.has(convoId)) return;
+    drainLockRef.current.add(convoId);
+    try {
+      for (;;) {
+        if (connectionRef.current !== 'connected') break;
+        const [next, ...rest] = queuedRef.current[convoId] || [];
+        if (!next) break;
+        queuedRef.current = { ...queuedRef.current, [convoId]: rest };
+        setQueued(queuedRef.current);
+        try {
+          await submitMessageRef.current(convoId, next);
+        } catch {
+          // submitMessage already surfaces failures as assistant messages; one
+          // rejected item must not strand the rest of the queue.
+        }
+      }
+    } finally {
+      // The lock releases only when the loop sees an empty queue, so a message
+      // enqueued during the final stream is always picked up by this drain or
+      // re-triggers the effect below.
+      drainLockRef.current.delete(convoId);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Idle + queued = drain. isBusy flips false at every stream end (complete,
+    // error, manual stop), so all three paths resume the queue, and switching
+    // back to a conversation or reconnecting the server drains it too.
+    if (!activeId || isBusy || connectionStatus !== 'connected') return;
+    if ((queued[activeId]?.length || 0) === 0) return;
+    void drainQueue(activeId);
+  }, [activeId, isBusy, connectionStatus, queued, drainQueue]);
+
+  const activeQueued = activeId ? queued[activeId] || [] : [];
+
+  const removeQueuedMessage = (id: string) => {
+    if (!activeId) return;
+    const queue = queuedRef.current[activeId] || [];
+    const next = queue.filter(item => item.id !== id);
+    if (next.length === queue.length) return;
+    queuedRef.current = { ...queuedRef.current, [activeId]: next };
+    setQueued(queuedRef.current);
+    setQueueNotice(null);
+  };
+
+  const clearQueuedMessages = () => {
+    if (!activeId) return;
+    queuedRef.current = { ...queuedRef.current, [activeId]: [] };
+    setQueued(queuedRef.current);
+    setQueueNotice(null);
+  };
 
   const handleRetryAssistant = useCallback(async (messageIndex: number) => {
-    if (!activeId || isBusy) return;
+    if (!activeId || isBusy || drainLockRef.current.has(activeId)) return;
     if (connectionStatus !== 'connected' || !currentModel || !currentModelSnapshot) return;
     const convo = conversations.find(c => c.id === activeId);
     if (!convo || convo.messages[messageIndex]?.role !== 'assistant') return;
@@ -3253,7 +3388,7 @@ ${finalText}`
 
   const handleEditUserMessage = useCallback(async (messageIndex: number, revisedContent: string) => {
     const text = revisedContent.trim();
-    if (!text || !activeId || isBusy) return;
+    if (!text || !activeId || isBusy || drainLockRef.current.has(activeId)) return;
     if (connectionStatus !== 'connected' || !currentModel || !currentModelSnapshot) return;
     const convo = conversations.find(c => c.id === activeId);
     if (!convo || convo.messages[messageIndex]?.role !== 'user') return;
@@ -3601,7 +3736,7 @@ ${finalText}`
   const fileAccept = acceptsFileAttachments
     ? [mediaAccept, DOCUMENT_INPUT_ACCEPT].filter(Boolean).join(',')
     : mediaAccept;
-  const canSubmit = !!currentModel && !isBusy && !isAttaching && (currentCapability === 'audio' && !modeSupportsChatCompletions
+  const hasComposableContent = currentCapability === 'audio' && !modeSupportsChatCompletions
     ? pendingAudioFiles.length > 0
     : currentCapability === 'image'
       ? (imageMode === 'edit' ? (!!inputValue.trim() && pendingImages.length > 0) : !!inputValue.trim())
@@ -3611,7 +3746,12 @@ ${finalText}`
           ? (model3dSettings.sourceMode === 'image' ? pendingImages.length > 0 : (!!inputValue.trim() && !!model3dSettings.imageModel))
           : currentCapability === 'tts'
             ? (!!inputValue.trim() && !openMossDescribeUnavailable && !openMossCloneUnavailable)
-            : (!!inputValue.trim() || pendingImages.length > 0 || pendingFiles.length > 0 || (canUseAudioInput && pendingAudioFiles.length > 0)));
+            : (!!inputValue.trim() || pendingImages.length > 0 || pendingFiles.length > 0 || (canUseAudioInput && pendingAudioFiles.length > 0));
+  const canSubmit = !!currentModel && !isBusy && !isAttaching && hasComposableContent;
+  // While a chat stream runs, Send stays live as "Queue message" — but only
+  // where the queue drains (chat completions with a conversation to queue on).
+  const queueAcceptingMode = modeSupportsChatCompletions && !!activeId;
+  const canQueueSubmit = !!currentModel && !isAttaching && queueAcceptingMode && hasComposableContent;
   const composerPlaceholder = !currentModel
     ? 'Draft a message. Connect and load a model to send…'
     : currentIsOmniCollection
@@ -4157,6 +4297,38 @@ ${finalText}`
       {/* Composer */}
       <div aria-live="polite" aria-atomic="true" className="sr-only">{unloadAnnouncement}</div>
       <div className="composer" onDrop={handleDrop} onDragOver={handleDragOver}>
+        {activeQueued.length > 0 && (
+          <div className="composer__queue">
+            <div className="composer__queue-head">
+              <span className="composer__queue-title">Queued {activeQueued.length}/{MAX_QUEUED_MESSAGES}</span>
+              <button
+                type="button"
+                className="composer__queue-clear"
+                onClick={clearQueuedMessages}
+                aria-label="Clear queued messages"
+              >Clear all</button>
+            </div>
+            <div className="composer__queue-list" role="list" aria-label="Queued messages">
+              {activeQueued.map((item, index) => (
+                <div key={item.id} className="composer__queue-item" role="listitem">
+                  <span className="composer__queue-snippet" title={summarizeQueuedItem(item)}>
+                    {summarizeQueuedItem(item)}
+                  </span>
+                  <button
+                    type="button"
+                    className="composer__queue-remove"
+                    onClick={() => removeQueuedMessage(item.id)}
+                    aria-label={`Remove queued message ${index + 1}`}
+                    title="Remove from queue"
+                  >×</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {queueNotice && (
+          <p className="composer__queue-notice" role="status">{queueNotice}</p>
+        )}
         <div className="composer__toolbar">
           {(modelPickerOptions.length > 0 || modelPickerOpen) && (
             <div className="composer__model-picker" ref={modelPickerRef}>
@@ -4889,7 +5061,7 @@ ${finalText}`
             onChange={e => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            disabled={isBusy}
+            disabled={isBusy && !queueAcceptingMode}
             rows={1}
             aria-label="Message"
           />
@@ -4967,16 +5139,16 @@ ${finalText}`
               <Icon name="mic" size={16} />
             </button>
           )}
-          {isStreaming ? (
+          {isStreaming && (
             <button className="composer__stop" onClick={handleStop} aria-label="Stop generating" title="Stop"><Icon name="stop" size={16} /></button>
-          ) : (
-            <button
-              className="composer__send"
-              onClick={() => handleSend()}
-              disabled={!canSubmit}
-              aria-label="Send"
-            ><Icon name="send" size={16} /></button>
           )}
+          <button
+            className="composer__send"
+            onClick={() => handleSend()}
+            disabled={isStreaming ? !canQueueSubmit : !canSubmit}
+            aria-label={isStreaming ? 'Queue message' : 'Send'}
+            title={isStreaming ? 'Queue this message to send when the response finishes' : undefined}
+          ><Icon name="send" size={16} /></button>
         </div>
         </div>
         <div className="composer__hint">{composerHint}</div>
