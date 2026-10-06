@@ -19,6 +19,7 @@ export interface AudioContent {
 }
 
 export interface UploadedFile {
+  id: string;
   filename: string;
   content: string;
   language: string;

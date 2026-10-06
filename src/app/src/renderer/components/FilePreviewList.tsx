@@ -19,7 +19,7 @@ const FilePreviewList: React.FC<FilePreviewListProps> = ({
   return (
     <div className={className}>
       {files.map((file, index) => (
-        <div key={index} className="file-preview-item" title={`${file.filename} (${formatFileSize(file.sizeBytes)})`}>
+        <div key={file.id} className="file-preview-item" title={`${file.filename} (${formatFileSize(file.sizeBytes)})`}>
           <span className="file-preview-icon">
             <FileTextIcon />
           </span>

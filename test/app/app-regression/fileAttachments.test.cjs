@@ -2,7 +2,7 @@
 //
 // Exercises the TypeScript helpers in fileAttachments.ts directly (classify,
 // language detection, binary sniffing, prompt wrapping, request conversion)
-// and asserts the LLMChatPanel wiring contract via source inspection.
+// and asserts the panel/preview wiring contract via source inspection.
 
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -123,11 +123,31 @@ const tests = [
     name: 'wrapFileForPrompt emits a fenced block with filename header',
     run() {
       const wrapped = fileAttachments.wrapFileForPrompt({
-        filename: 'main.py', content: 'print("hi")', language: 'python', sizeBytes: 11,
+        id: 'file-1', filename: 'main.py', content: 'print("hi")', language: 'python', sizeBytes: 11,
       });
       assert.ok(wrapped.includes('Attached file: main.py'), 'header missing');
       assert.ok(wrapped.includes('```python'), 'language fence missing');
       assert.ok(wrapped.includes('print("hi")'), 'content missing');
+    },
+  },
+  {
+    name: 'wrapFileForPrompt lengthens the fence around backtick-heavy content',
+    run() {
+      const wrapped = fileAttachments.wrapFileForPrompt({
+        id: 'file-2', filename: 'notes.md', content: 'nested ``` fence', language: 'markdown', sizeBytes: 16,
+      });
+      assert.ok(wrapped.includes('````markdown'), 'fence must outgrow the content backtick run');
+      assert.ok(wrapped.includes('nested ``` fence'), 'content must stay intact');
+      assert.ok(wrapped.endsWith('\n````'), 'closing fence must match the opening one');
+    },
+  },
+  {
+    name: 'createFileAttachmentId mints unique sequential ids',
+    run() {
+      const a = fileAttachments.createFileAttachmentId();
+      const b = fileAttachments.createFileAttachmentId();
+      assert.notEqual(a, b);
+      assert.match(a, /^file-\d+$/);
     },
   },
   {
@@ -141,7 +161,7 @@ const tests = [
     run() {
       const converted = fileAttachments.convertContentForRequest([
         { type: 'text', text: 'review this' },
-        { type: 'file', file: { filename: 'a.py', content: 'x=1', language: 'python', sizeBytes: 3 } },
+        { type: 'file', file: { id: 'file-3', filename: 'a.py', content: 'x=1', language: 'python', sizeBytes: 3 } },
       ]);
       assert.equal(typeof converted, 'string');
       assert.ok(converted.startsWith('review this'), 'user text must come first');
@@ -154,7 +174,7 @@ const tests = [
     run() {
       const converted = fileAttachments.convertContentForRequest([
         { type: 'text', text: 'look' },
-        { type: 'file', file: { filename: 'b.md', content: '# hi', language: 'markdown', sizeBytes: 4 } },
+        { type: 'file', file: { id: 'file-4', filename: 'b.md', content: '# hi', language: 'markdown', sizeBytes: 4 } },
         { type: 'image_url', image_url: { url: 'data:image/png;base64,AAA' } },
       ]);
       assert.ok(Array.isArray(converted));
@@ -200,6 +220,17 @@ const tests = [
       const source = readPanelSource();
       assert.ok(source.includes('vision-capable model'), 'dropped images must be rejected without a vision model');
       assert.ok(source.includes('Audio attachments are not supported'), 'dropped audio must be rejected without audio support');
+    },
+  },
+  {
+    name: 'preview chips key on stable attachment ids',
+    run() {
+      const previewSource = fs.readFileSync(
+        path.join(appRoot, 'src', 'renderer', 'components', 'FilePreviewList.tsx'),
+        'utf8',
+      );
+      assert.ok(previewSource.includes('key={file.id}'), 'FilePreviewList must key chips on file.id');
+      assert.ok(readPanelSource().includes('id: createFileAttachmentId()'), 'panel must mint ids at ingestion');
     },
   },
 ];

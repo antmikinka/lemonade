@@ -9,6 +9,15 @@ import {
 
 export const MAX_FILE_SIZE_BYTES = 1024 * 1024;
 
+let nextAttachmentId = 0;
+
+// Session counter rather than crypto.randomUUID: stable React keys without a
+// platform dependency (webkit2gtk availability varies by distro).
+export function createFileAttachmentId(): string {
+  nextAttachmentId += 1;
+  return `file-${nextAttachmentId}`;
+}
+
 const LANGUAGE_BY_EXTENSION: Record<string, string> = {
   txt: 'text',
   text: 'text',
@@ -204,8 +213,25 @@ export function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function longestBacktickRun(text: string): number {
+  let longest = 0;
+  let current = 0;
+  for (const char of text) {
+    if (char === '`') {
+      current += 1;
+      if (current > longest) longest = current;
+    } else {
+      current = 0;
+    }
+  }
+  return longest;
+}
+
 export function wrapFileForPrompt(file: UploadedFile): string {
-  return `Attached file: ${file.filename}\n\`\`\`${file.language}\n${file.content}\n\`\`\``;
+  // CommonMark: a fence must be longer than any backtick run in the content,
+  // or files containing ``` would close the block early.
+  const fence = '`'.repeat(Math.max(3, longestBacktickRun(file.content) + 1));
+  return `Attached file: ${file.filename}\n${fence}${file.language}\n${file.content}\n${fence}`;
 }
 
 /**

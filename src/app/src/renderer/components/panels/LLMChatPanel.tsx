@@ -15,6 +15,7 @@ import { Message, MessageContent, TextContent, ImageContent, AudioContent, FileC
 import {
   classifyFile,
   convertContentForRequest,
+  createFileAttachmentId,
   FILE_INPUT_ACCEPT,
   formatFileSize,
   isProbablyBinaryText,
@@ -422,6 +423,7 @@ const LLMChatPanel: React.FC<LLMChatPanelProps> = ({
           return;
         }
         addFiles(prev => [...prev, {
+          id: createFileAttachmentId(),
           filename: file.name,
           content: text,
           language: languageForFilename(file.name, file.type),
