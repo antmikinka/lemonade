@@ -106,8 +106,8 @@ assert.match(chatViewSource, /if \(acceptsFileAttachments\) \{\s*const file = it
   'pasting documents from the OS clipboard must attach them');
 assert.match(chatViewSource, /files = files\.filter\(f => !isDocumentAttachment\(f\) && classifyFile\(f\) !== 'unsupported'\);/,
   'a mixed drop must keep routing its images/audio after documents are extracted');
-assert.match(chatViewSource, /if \(files\.length === 0\) return;\s*\}\s*\}\s*\n\s*if \(isOpenMossTts/,
-  'document-only drops must stop before the media routing branches');
+assert.match(chatViewSource, /if \(files\.length === 0\) return;\s*\}\s*\} else if \(documents\.length > 0 \|\| unsupported\.length > 0\) \{\s*\n[\s\S]*?not attachable in this mode\.`\);\s*\n\s*if \(files\.length === 0\) return;\s*\n\s*\}\s*\n\s*if \(isOpenMossTts/,
+  'document-only drops must stop before the media routing branches, and modes without a document sink must name the rejected files');
 assert.match(chatViewSource, /const text = decodeTextFile\(new Uint8Array\(await file\.arrayBuffer\(\)\)\);/,
   'text decoding must go through the BOM-sniffing helper');
 assert.match(chatViewSource, /unsupported file type/,
