@@ -69,6 +69,7 @@ import {
   MAX_FILE_SIZE_BYTES,
   classifyFile,
   composePromptWithFiles,
+  createAttachmentId,
   decodeTextFile,
   formatFileSize,
   isDocumentAttachment,
@@ -3300,11 +3301,14 @@ ${finalText}`
   const acceptsFileAttachments = modeSupportsChatCompletions && currentCapability === 'chat';
 
   const addAttachments = useCallback(async (files: File[]) => {
+    const documents = files.filter(isDocumentAttachment);
+    const unsupported = files.filter(f => classifyFile(f) === 'unsupported');
+    if (documents.length > 0 || unsupported.length > 0) {
+      files = files.filter(f => !isDocumentAttachment(f) && classifyFile(f) !== 'unsupported');
+    }
+
     if (acceptsFileAttachments) {
-      const documents = files.filter(isDocumentAttachment);
-      const unsupported = files.filter(f => classifyFile(f) === 'unsupported');
       if (documents.length > 0 || unsupported.length > 0) {
-        files = files.filter(f => !isDocumentAttachment(f) && classifyFile(f) !== 'unsupported');
         const slots = MAX_FILE_ATTACHMENTS - pendingFiles.length;
         const accepted: AttachedFile[] = [];
         const problems: string[] = [];
@@ -3326,6 +3330,7 @@ ${finalText}`
                   continue;
                 }
                 accepted.push({
+                  id: createAttachmentId(),
                   filename: file.name,
                   language: 'text',
                   content: result.truncated
@@ -3340,6 +3345,7 @@ ${finalText}`
                   continue;
                 }
                 accepted.push({
+                  id: createAttachmentId(),
                   filename: file.name,
                   language: languageForFilename(file.name, file.type),
                   content: text,
@@ -3365,6 +3371,12 @@ ${finalText}`
         setFileAttachmentError(problems.length > 0 ? problems.join(' ') : null);
         if (files.length === 0) return;
       }
+    } else if (documents.length > 0 || unsupported.length > 0) {
+      // Image/transcription/TTS modes have no document sink; name the rejected
+      // files so a mistaken drop is never invisible.
+      const names = [...documents, ...unsupported].map(f => f.name).join(', ');
+      setFileAttachmentError(`${names}: not attachable in this mode.`);
+      if (files.length === 0) return;
     }
 
     if (isOpenMossTts && openMossSettings.mode === 'clone') {
@@ -3468,8 +3480,8 @@ ${finalText}`
     setPendingAudioFiles([]);
   }, []);
 
-  const removeFile = useCallback((index: number) => {
-    setPendingFiles(prev => prev.filter((_, i) => i !== index));
+  const removeFile = useCallback((id: string | undefined) => {
+    setPendingFiles(prev => prev.filter(f => f.id !== id));
     setFileAttachmentError(null);
   }, []);
 
@@ -4640,10 +4652,10 @@ ${finalText}`
         )}
         {pendingFiles.length > 0 && (
           <div className="composer__files" role="list" aria-label="Document attachments">
-            {pendingFiles.map((file, i) => (
-              <div key={`${file.filename}-${i}`} className="composer__file-chip" role="listitem" title={`${file.language} · ${formatFileSize(file.size)}`}>
+            {pendingFiles.map((file) => (
+              <div key={file.id ?? file.filename} className="composer__file-chip" role="listitem" title={`${file.language} · ${formatFileSize(file.size)}`}>
                 <span><Icon name={file.filename.toLowerCase().endsWith('.pdf') ? 'file' : 'code'} size={13} /> {file.filename}</span>
-                <button onClick={() => removeFile(i)} aria-label={`Remove ${file.filename}`}>×</button>
+                <button onClick={() => removeFile(file.id)} aria-label={`Remove ${file.filename}`}>×</button>
               </div>
             ))}
           </div>
@@ -5315,7 +5327,7 @@ const MessageBubble: React.FC<{ message: Message; activeModel: ModelSnapshot | n
             <div className="message__file-chip"><Icon name="mic" size={13} /> {message.audioName}</div>
           )}
           {message.files?.map((file, i) => (
-            <div key={`${file.filename}-${i}`} className="message__file-chip" title={`${file.language} · ${formatFileSize(file.size)}`}>
+            <div key={file.id ?? `${file.filename}-${i}`} className="message__file-chip" title={`${file.language} · ${formatFileSize(file.size)}`}>
               <Icon name={file.filename.toLowerCase().endsWith('.pdf') ? 'file' : 'code'} size={13} /> {file.filename}
             </div>
           ))}

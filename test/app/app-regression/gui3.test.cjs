@@ -1,4 +1,6 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const {
   readSource,
   assertIncludes,
@@ -7,6 +9,34 @@ const {
 } = require('./helpers/source.cjs');
 
 const COLLECTION_MODELS = 'src/app/src/features/collections/collectionModels.ts';
+const CHAT_VIEW = 'src/app/src/components/ChatView.tsx';
+const CHAT_ATTACHMENTS = path.join(
+  __dirname, '..', '..', '..', 'src', 'app', 'src', 'features', 'chatAttachments', 'fileAttachments.ts',
+);
+
+// Transpile-on-require so the pure attachment helpers can be unit-tested here
+// (same loader pattern as the legacy fileAttachments suite).
+function loadChatAttachments() {
+  let ts = null;
+  try { ts = require(path.join(__dirname, '..', '..', '..', 'src', 'app', 'node_modules', 'typescript')); }
+  catch (_) {
+    try { ts = require('typescript'); } catch (_2) { return null; }
+  }
+  if (!require.extensions['.ts']) {
+    require.extensions['.ts'] = function loadTypeScript(module, filename) {
+      const source = fs.readFileSync(filename, 'utf8');
+      const output = ts.transpileModule(source, {
+        compilerOptions: {
+          esModuleInterop: true, module: ts.ModuleKind.CommonJS,
+          moduleResolution: ts.ModuleResolutionKind.NodeJs, target: ts.ScriptTarget.ES2020,
+        },
+        fileName: filename,
+      }).outputText;
+      module._compile(output, filename);
+    };
+  }
+  return require(CHAT_ATTACHMENTS);
+}
 const MODEL_MANAGER = 'src/app/src/components/ModelManager.tsx';
 const OMNI_TOOLS = 'src/app/src/tools/omniTools.ts';
 const TOOL_DEFINITIONS = 'src/app/src/tools/toolDefinitions.json';
@@ -100,6 +130,37 @@ const tests = [
         'selected virtual model in the UI',
         'The collection should remain a virtual selection after its components load.',
       );
+    },
+  },
+  {
+    name: 'chat attachments mint stable ids and stay readable for pre-id history',
+    run() {
+      const fa = loadChatAttachments();
+      if (!fa) return { skip: true, reason: "typescript not installed - run 'npm ci' in src/app first" };
+      const first = fa.createAttachmentId();
+      const second = fa.createAttachmentId();
+      assert.notEqual(first, second);
+      assert.match(first, /^file-\d+$/);
+      const legacy = { filename: 'old.md', language: 'markdown', content: '# hi', size: 4 };
+      assert.ok(fa.wrapFileForPrompt(legacy).includes('Attached file: old.md'));
+      assert.ok(fa.composePromptWithFiles('look', [legacy]).startsWith('look'));
+      const nested = fa.wrapFileForPrompt({ ...legacy, content: '```nested```' });
+      assert.ok(nested.includes('````markdown'), 'fence must outgrow backtick runs in content');
+    },
+  },
+  {
+    name: 'ChatView keys attachment chips on stable ids and explains rejected drops',
+    run() {
+      const source = readSource(CHAT_VIEW);
+      assertIncludes(source, 'key={file.id ?? file.filename}', 'Composer chips must key on the attachment id.');
+      assertIncludes(
+        source,
+        'key={file.id ?? `${file.filename}-${i}`}',
+        'History chips must fall back for storage saved before ids existed.',
+      );
+      assert.equal(source.split('id: createAttachmentId(),').length - 1, 2, 'Both ingest paths must mint attachment ids.');
+      assertIncludes(source, 'prev.filter(f => f.id !== id)', 'Removal must target the attachment id, not a shifted index.');
+      assertIncludes(source, 'not attachable in this mode', 'Modes without chat completions must explain rejected documents.');
     },
   },
 ];
