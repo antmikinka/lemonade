@@ -3,6 +3,8 @@
 // them without content-part support.
 
 export interface AttachedFile {
+  // Optional: conversations saved before attachments carried ids still load.
+  id?: string;
   filename: string;
   language: string;
   content: string;
@@ -11,6 +13,15 @@ export interface AttachedFile {
 
 export const MAX_FILE_SIZE_BYTES = 1024 * 1024;
 export const MAX_FILE_ATTACHMENTS = 4;
+
+let nextAttachmentId = 0;
+
+// Session counter rather than crypto.randomUUID: stable React keys without a
+// platform dependency (webkit2gtk availability varies by distro).
+export function createAttachmentId(): string {
+  nextAttachmentId += 1;
+  return `file-${nextAttachmentId}`;
+}
 
 const LANGUAGE_BY_EXTENSION: Record<string, string> = {
   txt: 'text',
