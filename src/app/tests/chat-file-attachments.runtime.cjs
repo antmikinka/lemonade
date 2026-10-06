@@ -119,7 +119,7 @@ assert.match(chatViewSource, /if \(currentCapability !== 'chat'\) \{\s*setPendin
   'switching away from chat must clear document chips so they are never attached-but-not-sent');
 assert.match(chatViewSource, /const hasFiles = pendingFiles\.length > 0 && acceptsFileAttachments;/,
   'handleSend must not smuggle stale documents into non-chat send paths');
-assert.match(chatViewSource, /if \(!canSubmitContent \|\| isBusy \|\| isAttaching \|\| !currentModelSnapshot\) return;/,
+assert.match(chatViewSource, /if \(!canSubmitContent \|\| isAttaching \|\| !currentModelSnapshot\) return;/,
   'sending mid-extraction must be blocked so the attachment cannot reappear after send');
 assert.match(chatViewSource, /setIsAttaching\(true\);\s*try \{/,
   'extraction must flag itself in flight');

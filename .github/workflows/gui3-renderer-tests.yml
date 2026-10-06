@@ -43,6 +43,7 @@ jobs:
           npm run test:conversation-export
           npm run test:conversation-title
           npm run test:chat-file-attachments
+          npm run test:chat-queue
           npm run test:model-kinds
           npm run test:mcp-mock
           npm run test:mcp-runtime
