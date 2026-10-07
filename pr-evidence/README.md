@@ -39,5 +39,6 @@ composed by hand in the browser form from the fact bullets.
 | [pr13-attachment-hardening.md](pr13-attachment-hardening.md) | #13 | merged | #12 | 364a31d34 |
 | [pr15-queue-chat.md](pr15-queue-chat.md) | #15 | merged | #14 | ace611cb6 |
 | [upstream-1984-file-support.md](upstream-1984-file-support.md) | not opened | HELD | lemonade-sdk#1984 | branch feat/1984-chat-file-support @2c7defe39 |
+| [upstream-gui3-landing.md](upstream-gui3-landing.md) | not opened | READY | Primal Discord go-ahead ("merge to RC") | branch feat/gui3-upstream-landing → upstream GUI3_squashed, gates green 2026-10-06 |
 
 Screenshot base URL: `https://raw.githubusercontent.com/antmikinka/lemonade/screenshots/<file>.png`
