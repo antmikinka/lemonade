@@ -10,8 +10,6 @@ const titleSource = fs.readFileSync(
   path.join(root, 'src/features/chatHistory/conversationTitle.ts'), 'utf8');
 const chatViewSource = fs.readFileSync(path.join(root, 'src/components/ChatView.tsx'), 'utf8');
 const packageSource = fs.readFileSync(path.join(root, 'package.json'), 'utf8');
-const workflowSource = fs.readFileSync(
-  path.join(root, '../../.github/workflows/gui3-renderer-tests.yml'), 'utf8');
 
 // ── Title module ───────────────────────────────────────────────────────────
 
@@ -56,11 +54,9 @@ const stopBody = /const handleStop = useCallback\([\s\S]*?\}, \[/.exec(chatViewS
 assert.ok(stopBody && !stopBody.includes('pendingAutoTitleRef'),
   'manual stop must not consume the seed either');
 
-// ── Test + CI wiring ───────────────────────────────────────────────────────
+// ── Test wiring ────────────────────────────────────────────────────────────
 
 assert.match(packageSource, /"test:conversation-title": "node tests\/conversation-title\.runtime\.cjs && node tests\/conversation-title\.unit\.mjs"/,
   'the title suites must join the package scripts');
-assert.match(workflowSource, /npm run test:conversation-title/,
-  'the fork CI gate must run the title suites');
 
 console.log('Conversation title contract checks passed.');

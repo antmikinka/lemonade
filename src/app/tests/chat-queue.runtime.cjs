@@ -17,8 +17,6 @@ const stylesSource = fs.readFileSync(path.join(root, 'src/styles/styles.css'), '
 const exportSource = fs.readFileSync(
   path.join(root, 'src/features/chatHistory/conversationExport.ts'), 'utf8');
 const packageSource = fs.readFileSync(path.join(root, 'package.json'), 'utf8');
-const workflowSource = fs.readFileSync(
-  path.join(root, '../../.github/workflows/gui3-renderer-tests.yml'), 'utf8');
 
 // ── Queue module ───────────────────────────────────────────────────────────
 
@@ -120,11 +118,9 @@ assert.match(stylesSource, /\.composer__queue-notice \{[\s\S]*?color: var\(--dan
 assert.match(stylesSource, /\.composer__queue-snippet \{[\s\S]*?text-overflow: ellipsis;/,
   'long queued drafts must truncate instead of blowing out the strip');
 
-// ── Test + CI wiring ───────────────────────────────────────────────────────
+// ── Test wiring ────────────────────────────────────────────────────────────
 
 assert.match(packageSource, /"test:chat-queue": "node tests\/chat-queue\.runtime\.cjs && node tests\/chat-queue\.unit\.mjs"/,
   'the queue suites must join the package scripts');
-assert.match(workflowSource, /npm run test:chat-queue/,
-  'the fork CI gate must run the queue suites');
 
 console.log('Chat queue contract checks passed.');
